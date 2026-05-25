@@ -1,98 +1,319 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, TextInput, ScrollView, Alert, Platform } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, TextInput, ScrollView, SafeAreaView, Platform, LayoutAnimation, UIManager, Alert, LogBox } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
-import { FontAwesome5, Ionicons } from '@expo/vector-icons';
+import { FontAwesome5, Ionicons, Feather } from '@expo/vector-icons';
+import * as Notifications from 'expo-notifications';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
-export default function TelaAgendar({ setTelaAtual, petAtual, agendamentos, setAgendamentos }) {
+// 👉 IGNORA A TELA VERMELHA DE AVISO DO EXPO GO
+LogBox.ignoreLogs(['expo-notifications: Android Push notifications']);
+
+// 👉 MÁGICA DA FLUIDEZ
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+// Configuração da Notificação
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
+
+export default function TelaAgendar({ setTelaAtual, petAtual, agendamentos, setAgendamentos, notificacoesAtivas }) {
+  
+  // 👉 ESTADOS DO CALENDÁRIO NATIVO
+  const [dataExata, setDataExata] = useState(new Date()); 
+  const [mostrarPicker, setMostrarPicker] = useState(false);
+  const [modoPicker, setModoPicker] = useState('date'); 
+  
+  const [textoData, setTextoData] = useState('');
+  const [textoHorario, setTextoHorario] = useState('');
   const [compromisso, setCompromisso] = useState('');
-  const [data, setData] = useState('');
-  const [horario, setHorario] = useState('');
   const [observacao, setObservacao] = useState('');
 
-  const handleAgendar = () => {
-    if (compromisso.trim() === '' || data.trim() === '') {
-      alert('Preencha pelo menos o compromisso e a data!');
+  // Pede permissão para enviar notificações assim que a tela abre
+  useEffect(() => {
+    (async () => {
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status !== 'granted') {
+        console.log('Permissão de notificação negada.');
+      }
+    })();
+  }, []);
+
+  const navegarComAnimacao = (tela) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setTelaAtual(tela);
+  };
+
+  // 👉 MESCLANDO DATA E HORA DE FORMA SEGURA
+  const aoEscolherDataHora = (event, dataSelecionada) => {
+    if (Platform.OS === 'android') {
+      setMostrarPicker(false);
+    }
+
+    if (event.type === 'set' && dataSelecionada) {
+      const novaData = new Date(dataExata); 
+
+      if (modoPicker === 'date') {
+        novaData.setFullYear(dataSelecionada.getFullYear());
+        novaData.setMonth(dataSelecionada.getMonth());
+        novaData.setDate(dataSelecionada.getDate());
+
+        const dia = String(novaData.getDate()).padStart(2, '0');
+        const mes = String(novaData.getMonth() + 1).padStart(2, '0');
+        const ano = novaData.getFullYear();
+        setTextoData(`${dia}/${mes}/${ano}`);
+        
+      } else if (modoPicker === 'time') {
+        novaData.setHours(dataSelecionada.getHours());
+        novaData.setMinutes(dataSelecionada.getMinutes());
+
+        const hora = String(novaData.getHours()).padStart(2, '0');
+        const minuto = String(novaData.getMinutes()).padStart(2, '0');
+        setTextoHorario(`${hora}:${minuto}`);
+      }
+
+      setDataExata(novaData); 
+    }
+  };
+
+  const abrirCalendario = () => {
+    setModoPicker('date');
+    setMostrarPicker(true);
+  };
+
+  const abrirRelogio = () => {
+    setModoPicker('time');
+    setMostrarPicker(true);
+  };
+
+  const handleAgendar = async () => {
+    if (textoData === '' || textoHorario === '' || compromisso.trim() === '') {
+      alert('Por favor, preencha a data, o horário e o compromisso!');
       return;
     }
 
-    // Salva na nossa memória geral do App.js
+    // 👉 BLOQUEIO CONTRA ERROS SILENCIOSOS E RESPEITO ÀS CONFIGURAÇÕES
+    try {
+      if (notificacoesAtivas) {
+        const dataDaNotificacao = new Date(dataExata.getTime() - (2 * 60 * 60 * 1000));
+
+        if (dataDaNotificacao > new Date()) {
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title: `Lembrete: ${petAtual?.nome} 🐾`,
+              body: `Faltam 2 horas para: ${compromisso}. Prepare-se!`,
+              sound: true,
+            },
+            trigger: { date: dataDaNotificacao }, 
+          });
+        } else {
+          alert('Atenção: Esse horário é muito próximo ou já passou, o alarme de 2h não tocará.');
+        }
+      }
+    } catch (error) {
+      console.log("Aviso de Notificação:", error.message);
+    }
+
+    // 👉 SALVANDO NO APLICATIVO
     const novoAgendamento = {
-      id: Math.random().toString(),
-      petId: petAtual.id,
-      compromisso,
-      data,
-      horario,
-      observacao
+      id: Math.random().toString(36).substring(7),
+      petId: petAtual?.id,
+      data: textoData,
+      compromisso: `${compromisso} às ${textoHorario}`,
+      observacao: observacao
     };
 
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setAgendamentos([...agendamentos, novoAgendamento]);
-
-    // 👉 SIMULA A NOTIFICAÇÃO!
-    const mensagemNotificacao = `Agendado com sucesso!\nNós enviaremos uma notificação no dia ${data} às ${horario} para o compromisso: ${compromisso} do ${petAtual.nome}.`;
-
-    if (Platform.OS === 'web') {
-      window.alert(mensagemNotificacao);
-      setTelaAtual('MetasCuidados');
-    } else {
-      Alert.alert("Notificação Programada!", mensagemNotificacao, [
-        { text: "Ótimo!", onPress: () => setTelaAtual('MetasCuidados') }
-      ]);
+    
+    if (Platform.OS !== 'web') {
+      Alert.alert(
+        "Agendado! ✅", 
+        notificacoesAtivas 
+          ? `O compromisso "${compromisso}" foi salvo e o alarme tocará 2 horas antes!`
+          : `Compromisso salvo! (Aviso: As notificações estão desativadas no seu perfil).`
+      );
     }
+    setTelaAtual('MetasCuidados');
   };
 
   return (
     <LinearGradient colors={['#F86F03', '#4F7FFF']} style={styles.container}>
-      <StatusBar style="auto" />
+      <StatusBar style="light" />
 
-      <FontAwesome5 name="paw" size={80} color="rgba(248, 111, 3, 0.4)" style={[styles.patinha, { bottom: 50, right: 30, transform: [{ rotate: '-20deg' }] }]} />
-      <FontAwesome5 name="paw" size={60} color="rgba(248, 111, 3, 0.3)" style={[styles.patinha, { bottom: 150, right: 100, transform: [{ rotate: '-10deg' }] }]} />
+      <SafeAreaView style={{ flex: 1 }}>
+        <FontAwesome5 name="paw" size={120} color="rgba(255, 255, 255, 0.2)" style={[styles.patinha, { top: -10, right: -20, transform: [{ rotate: '20deg' }] }]} />
+        <FontAwesome5 name="paw" size={60} color="rgba(79, 127, 255, 0.4)" style={[styles.patinha, { bottom: 50, right: 100, transform: [{ rotate: '-10deg' }] }]} />
 
-      <View style={styles.cabecalho}>
-        <TouchableOpacity onPress={() => setTelaAtual('MetasCuidados')}>
-          <Ionicons name="arrow-undo-outline" size={40} color="#CC5A00" />
-        </TouchableOpacity>
-      </View>
+        <View style={styles.areaCabecalho}>
+          <TouchableOpacity onPress={() => navegarComAnimacao('MetasCuidados')} style={styles.botaoVoltar}>
+            <Ionicons name="arrow-back" size={28} color="#FFF" />
+          </TouchableOpacity>
+          <View style={styles.textosCabecalho}>
+            <Text style={styles.tituloHeader}>Nova Tarefa</Text>
+            <Text style={styles.subTituloHeader}>Agenda do {petAtual?.nome}</Text>
+          </View>
+        </View>
 
-      <Text style={styles.titulo}>Novo Compromisso</Text>
-      <Text style={styles.subtitulo}>Para o pet: {petAtual?.nome}</Text>
+        <View style={styles.cardAlegre}>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+            
+            <View style={styles.areaIconeCentral}>
+              <View style={[styles.circuloIcone, !notificacoesAtivas && { borderColor: '#CCC', backgroundColor: '#F4F5F7' }]}>
+                <FontAwesome5 name={notificacoesAtivas ? "bell" : "bell-slash"} size={35} color={notificacoesAtivas ? "#F86F03" : "#888"} />
+              </View>
+              <Text style={[styles.textoInstrucao, !notificacoesAtivas && { color: '#888' }]}>
+                {notificacoesAtivas 
+                  ? "Você será notificado automaticamente 2 horas antes do evento!" 
+                  : "As notificações estão desativadas no seu perfil."}
+              </Text>
+            </View>
 
-      <ScrollView style={styles.formContainer} showsVerticalScrollIndicator={false}>
-        
-        <Text style={styles.label}>Compromisso:</Text>
-        <TextInput style={styles.input} value={compromisso} onChangeText={setCompromisso} placeholder="Ex: Vacina V10" placeholderTextColor="rgba(248, 111, 3, 0.5)" />
+            <Text style={styles.tituloSecao}>Data e Horário 📅</Text>
 
-        <Text style={styles.label}>Data:</Text>
-        <TextInput style={styles.input} value={data} onChangeText={setData} placeholder="Ex: 25/10/2026" placeholderTextColor="rgba(248, 111, 3, 0.5)" />
+            <TouchableOpacity style={styles.areaInputBotao} onPress={abrirCalendario}>
+              <Feather name="calendar" size={20} color="#888" style={styles.iconeInput} />
+              <Text style={[styles.textoInputBotao, !textoData && { color: '#A0A0A0' }]}>
+                {textoData || "Toque para escolher a data"}
+              </Text>
+            </TouchableOpacity>
 
-        <Text style={styles.label}>Horário:</Text>
-        <TextInput style={styles.input} value={horario} onChangeText={setHorario} placeholder="Ex: 14:30" placeholderTextColor="rgba(248, 111, 3, 0.5)" />
+            <TouchableOpacity style={styles.areaInputBotao} onPress={abrirRelogio}>
+              <Feather name="clock" size={20} color="#888" style={styles.iconeInput} />
+              <Text style={[styles.textoInputBotao, !textoHorario && { color: '#A0A0A0' }]}>
+                {textoHorario || "Toque para escolher o horário"}
+              </Text>
+            </TouchableOpacity>
 
-        <Text style={styles.label}>Observação:</Text>
-        <TextInput style={[styles.input, { height: 100, textAlignVertical: 'top' }]} value={observacao} onChangeText={setObservacao} placeholder="Ex: Levar a carteirinha" placeholderTextColor="rgba(248, 111, 3, 0.5)" multiline={true} />
+            {/* O CALENDÁRIO/RELÓGIO INVISÍVEL DO CELULAR */}
+            {mostrarPicker && (
+              <DateTimePicker
+                value={dataExata}
+                mode={modoPicker}
+                is24Hour={true}
+                display="default"
+                onChange={aoEscolherDataHora}
+              />
+            )}
 
-        <TouchableOpacity style={styles.botaoSalvar} onPress={handleAgendar}>
-          <Text style={styles.textoBotao}>Agendar e Notificar</Text>
-        </TouchableOpacity>
-        
-        <View style={{ height: 40 }} /> 
-      </ScrollView>
+            <Text style={styles.tituloSecao}>Detalhes do Evento</Text>
+
+            <View style={styles.areaInput}>
+              <Feather name="bookmark" size={20} color="#888" style={styles.iconeInput} />
+              <TextInput
+                style={styles.input}
+                placeholder="Ex: Vacina, Banho, Tosar..."
+                placeholderTextColor="#A0A0A0"
+                value={compromisso}
+                onChangeText={setCompromisso}
+              />
+            </View>
+
+            <View style={[styles.areaInput, { height: 100, alignItems: 'flex-start', paddingTop: 15 }]}>
+              <Feather name="align-left" size={20} color="#888" style={styles.iconeInput} />
+              <TextInput
+                style={[styles.input, { textAlignVertical: 'top' }]}
+                placeholder="Observações adicionais..."
+                placeholderTextColor="#A0A0A0"
+                multiline={true}
+                value={observacao}
+                onChangeText={setObservacao}
+              />
+            </View>
+
+            <TouchableOpacity 
+              style={[styles.botaoAcao, !notificacoesAtivas && { backgroundColor: '#4F7FFF', shadowColor: '#4F7FFF' }]} 
+              onPress={handleAgendar}
+            >
+              <Text style={styles.textoBotaoAcao}>{notificacoesAtivas ? "Agendar & Notificar" : "Apenas Agendar"}</Text>
+              <Feather name="check" size={22} color="#FFF" style={{ position: 'absolute', right: 20 }} />
+            </TouchableOpacity>
+
+          </ScrollView>
+        </View>
+
+      </SafeAreaView>
     </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 30, paddingTop: 50 },
+  container: { flex: 1 },
   patinha: { position: 'absolute', zIndex: 0 },
-  cabecalho: { marginBottom: 10, zIndex: 1, alignItems: 'flex-start' },
   
-  titulo: { fontSize: 35, fontWeight: '900', textAlign: 'center', color: '#333' },
-  subtitulo: { fontSize: 18, fontWeight: 'bold', textAlign: 'center', color: '#111', marginBottom: 30, fontStyle: 'italic' },
-  
-  formContainer: { flex: 1, zIndex: 1 },
-  label: { fontSize: 20, fontWeight: 'bold', color: '#333', marginLeft: 15, marginBottom: 5 },
-  input: { backgroundColor: '#333', padding: 15, borderRadius: 20, fontSize: 18, color: '#F86F03', marginBottom: 20 },
-  
-  botaoSalvar: { backgroundColor: '#111', padding: 15, borderRadius: 1000, alignItems: 'center', marginTop: 10, borderWidth: 2, borderColor: '#CC5A00' },
-  textoBotao: { color: '#CC5A00', fontSize: 18, fontWeight: 'bold' }
+  areaCabecalho: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 25, paddingTop: 40, paddingBottom: 60, zIndex: 1 },
+  botaoVoltar: { width: 50, height: 50, borderRadius: 25, backgroundColor: 'rgba(255,255,255,0.25)', justifyContent: 'center', alignItems: 'center', marginRight: 15 },
+  textosCabecalho: { flex: 1 },
+  tituloHeader: { fontSize: 28, fontWeight: '900', color: '#FFF', textShadowColor: 'rgba(0,0,0,0.2)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 3 },
+  subTituloHeader: { fontSize: 16, color: 'rgba(255,255,255,0.9)', fontWeight: 'bold' },
+
+  cardAlegre: {
+    backgroundColor: '#FFF',
+    borderTopLeftRadius: 40,
+    borderTopRightRadius: 40,
+    paddingHorizontal: 25,
+    paddingTop: 30,
+    flex: 1, 
+    marginTop: 10,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -5 },
+    shadowOpacity: 0.15,
+    shadowRadius: 15
+  },
+
+  areaIconeCentral: { alignItems: 'center', marginBottom: 30 },
+  circuloIcone: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#FFF3E0', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#F86F03', marginBottom: 10 },
+  textoInstrucao: { fontSize: 14, color: '#F86F03', textAlign: 'center', fontWeight: 'bold', paddingHorizontal: 10 },
+
+  tituloSecao: { fontSize: 20, fontWeight: '900', color: '#333', marginBottom: 15, marginLeft: 5 },
+
+  areaInputBotao: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F4F5F7',
+    borderRadius: 16,
+    marginBottom: 20,
+    paddingHorizontal: 20,
+    height: 65,
+    borderWidth: 1,
+    borderColor: '#EAEAEA'
+  },
+  textoInputBotao: { flex: 1, fontSize: 16, color: '#333', fontWeight: 'bold' },
+
+  areaInput: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F4F5F7',
+    borderRadius: 16,
+    marginBottom: 20,
+    paddingHorizontal: 20,
+    height: 65,
+    borderWidth: 1,
+    borderColor: '#EAEAEA'
+  },
+  iconeInput: { marginRight: 15 },
+  input: { flex: 1, fontSize: 16, color: '#333', fontWeight: 'bold' },
+
+  botaoAcao: {
+    flexDirection: 'row',
+    backgroundColor: '#F86F03',
+    borderRadius: 16,
+    height: 65,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 10,
+    shadowColor: '#F86F03',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5
+  },
+  textoBotaoAcao: { color: '#FFF', fontSize: 18, fontWeight: 'bold' }
 });

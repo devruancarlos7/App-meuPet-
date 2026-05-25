@@ -1,118 +1,152 @@
 import React, { useState } from 'react';
-// 1. Adicionamos o TextInput na importação abaixo
-import { View, Text, TouchableOpacity, StyleSheet, TextInput } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, SafeAreaView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
+import { FontAwesome5, Feather, Ionicons } from '@expo/vector-icons';
 
 export default function TelaDeLogin({ setTelaAtual }) {
-  // Variável para a mensagem do topo
-  
-  // 2. Criamos variáveis de estado para guardar o que o usuário digitar
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
 
+  const handleLogin = () => {
+    if (email.trim() === '' || senha.trim() === '') {
+      alert('Por favor, preencha todos os campos!');
+      return;
+    }
+    // Sucesso, vai para as casas
+    setTelaAtual('Casas');
+  };
+
   return (
-    <LinearGradient
-      colors={['#F86F03', '#4F7FFF']}
-      style={styles.container}
-    >
-      <StatusBar style="auto" />
+    <LinearGradient colors={['#F86F03', '#4F7FFF']} style={styles.container}>
+      <StatusBar style="light" />
 
-      <Text style={styles.versao}>v00.1</Text>
-      <Text style={styles.titulo}>Meu Pets</Text>
+      <SafeAreaView style={{ flex: 1 }}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.teclado}>
 
+          {/* 👉 CABEÇALHO CLEAN E MINIMALISTA */}
+          <View style={styles.areaCabecalho}>
+            <TouchableOpacity style={styles.botaoVoltar} onPress={() => setTelaAtual('Principal')}>
+              <Ionicons name="arrow-back" size={28} color="#FFF" />
+            </TouchableOpacity>
 
-      <View style={styles.botoesContainer}>
-        
-        {/* CONTAINER LARANJA COM OS INPUTS */}
-       
-          
-          <TextInput
-            style={styles.input}
-            placeholder="Digite seu e-mail"
-            placeholderTextColor="#F86F03"
-            value={email}
-            onChangeText={setEmail} /* Guarda o texto na variável email */
-            keyboardType="email-address" /* Abre o teclado com o "@" */
-          />
+            <FontAwesome5 name="paw" size={45} color="#FFF" style={{ marginBottom: 15 }} />
+            <Text style={styles.titulo}>Olá novamente!</Text>
+            <Text style={styles.subtitulo}>Acesse sua conta para continuar.</Text>
+          </View>
 
-          <TextInput
-            style={styles.input}
-            placeholder="Digite sua senha"
-            placeholderTextColor="#F86F03"
-            value={senha}
-            onChangeText={setSenha} /* Guarda o texto na variável senha */
-            secureTextEntry={true} /* Esconde a senha com "bolinhas" */
-          />
+          {/* 👉 CARTÃO BRANCO LISO (O Segredo do visual Clean) */}
+          <View style={styles.cardBranco}>
+            
+            <View style={styles.areaInput}>
+              <Feather name="mail" size={20} color="#888" style={styles.iconeInput} />
+              <TextInput
+                style={styles.input}
+                placeholder="E-mail"
+                placeholderTextColor="#A0A0A0"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                value={email}
+                onChangeText={setEmail}
+              />
+            </View>
 
-        </View>
+            <View style={styles.areaInput}>
+              <Feather name="lock" size={20} color="#888" style={styles.iconeInput} />
+              <TextInput
+                style={styles.input}
+                placeholder="Senha"
+                placeholderTextColor="#A0A0A0"
+                secureTextEntry={true}
+                value={senha}
+                onChangeText={setSenha}
+              />
+            </View>
 
-        {/* BOTÃO CONTINUAR ABAIXO DO CONTAINER */}
-        <TouchableOpacity
-          style={styles.botaoContinuar}
-          onPress={() => setTelaAtual('Casas')} 
-        >
-          <Text style={styles.textoBotaoContinuar}>Continuar</Text>
-        </TouchableOpacity>
+            <TouchableOpacity style={styles.esqueciSenha}>
+              <Text style={styles.textoEsqueciSenha}>Esqueci minha senha</Text>
+            </TouchableOpacity>
 
-  
-    </LinearGradient>  
+            <TouchableOpacity style={styles.botaoAcao} onPress={handleLogin}>
+              <Text style={styles.textoBotaoAcao}>Entrar</Text>
+            </TouchableOpacity>
+
+            {/* Rodapé Clean */}
+            <View style={styles.rodape}>
+              <Text style={styles.textoRodape}>Novo por aqui? </Text>
+              <TouchableOpacity onPress={() => setTelaAtual('Cadastro')}>
+                <Text style={styles.textoLinkRodape}>Crie uma conta</Text>
+              </TouchableOpacity>
+            </View>
+
+          </View>
+
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    padding: 30,
+  container: { flex: 1 },
+  teclado: { flex: 1, justifyContent: 'space-between' },
+
+  // Área do topo (Com o fundo do degradê visível)
+  areaCabecalho: { paddingHorizontal: 30, paddingTop: 20, paddingBottom: 40 },
+  botaoVoltar: { marginBottom: 30, alignSelf: 'flex-start' },
+  titulo: { fontSize: 32, fontWeight: 'bold', color: '#FFF', marginBottom: 5 },
+  subtitulo: { fontSize: 16, color: 'rgba(255,255,255,0.9)' },
+
+  // O cartão branco que sobe na tela
+  cardBranco: {
+    backgroundColor: '#FFF',
+    borderTopLeftRadius: 40,
+    borderTopRightRadius: 40,
+    paddingHorizontal: 30,
+    paddingTop: 50,
+    paddingBottom: 40,
+    flex: 1, // Faz o cartão preencher todo o resto da tela para baixo
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 10
   },
-  versao: {
-    position: 'absolute',
-    bottom: 10,
-    left: 15,
-    color: '#333',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  titulo: {
-    fontSize: 60,
-    fontWeight: '900',
-    textAlign: 'center',
-    marginBottom: 45,
-    color: '#333',
-  },
-  message: {
-    fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 20,
-    color: '#333',
-    fontWeight: 'bold',
-  },
-  botoesContainer: {
-    marginTop: 20,
-    gap: 15,
-  },
-  // Estilo das caixinhas de digitar
-  input: {
-    textDecorationColor: 'F86F03',
-    backgroundColor: '#333', // Fundo branco para contrastar com o laranja
-    padding: 15,
-    borderRadius: 1000,
-    marginBottom: 15, // Dá um espaço entre o input de e-mail e o de senha
-    fontSize: 16,
-    color: '#F86F03',
-  },
-  // Estilo do novo botão de continuar
-  botaoContinuar: {
-    backgroundColor: '#333', // Cinza escuro para destacar do fundo
-    padding: 15,
-    borderRadius: 1000,
+
+  // Inputs com fundo cinza suave, sem bordas pesadas
+  areaInput: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 10,
+    backgroundColor: '#F4F5F7',
+    borderRadius: 16,
+    marginBottom: 20,
+    paddingHorizontal: 15,
+    height: 60
   },
-  textoBotaoContinuar: {
-    color: '#F86F03', // Letra branca
-    fontSize: 18,
-    fontWeight: 'bold',
-  }
+  iconeInput: { marginRight: 15 },
+  input: { flex: 1, fontSize: 16, color: '#333' },
+
+  // Link de esqueci a senha puxando a cor azul da identidade visual
+  esqueciSenha: { alignSelf: 'flex-end', marginBottom: 40 },
+  textoEsqueciSenha: { color: '#4F7FFF', fontWeight: 'bold', fontSize: 14 },
+
+  // Botão sólido e arredondado
+  botaoAcao: {
+    backgroundColor: '#F86F03',
+    borderRadius: 16,
+    height: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 30,
+    shadowColor: '#F86F03',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5
+  },
+  textoBotaoAcao: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
+
+  rodape: { flexDirection: 'row', justifyContent: 'center' },
+  textoRodape: { color: '#666', fontSize: 15 },
+  textoLinkRodape: { color: '#F86F03', fontSize: 15, fontWeight: 'bold' }
 });

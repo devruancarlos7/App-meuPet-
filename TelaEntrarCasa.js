@@ -4,50 +4,62 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { FontAwesome5, Ionicons, Feather } from '@expo/vector-icons';
 
-// 👉 MÁGICA DA FLUIDEZ
+// 👉 MÁGICA DA FLUIDEZ: Habilita animações suaves no Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-export default function TelaNovaCasa({ setTelaAtual, casas, setCasas, usuarioAtual }) {
+export default function TelaEntrarCasa({ setTelaAtual, casas, membros, setMembros, usuarioAtual }) {
   
-  const [nomeCasa, setNomeCasa] = useState('');
+  const [codigoCasa, setCodigoCasa] = useState('');
 
-  // 👉 VOLTAR COM ANIMAÇÃO FLUIDA
+  // 👉 FUNÇÃO PARA VOLTAR COM FLUIDEZ
   const handleVoltar = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setTelaAtual('Casas');
   };
 
-  const handleCriarCasa = () => {
-    if (nomeCasa.trim() === '') {
-      alert("Por favor, dê um nome para a sua casa!");
+  const handleEntrarCasa = () => {
+    if (codigoCasa.trim() === '') {
+      alert("Por favor, digite o ID da casa!");
       return;
     }
 
-    // Criando uma nova casa com um ID aleatório para o nosso MVP
-    const idAleatorio = Math.random().toString(36).substring(7);
+    const casaEncontrada = casas.find(c => c.id === codigoCasa.trim());
 
-    const novaCasa = {
-      id: idAleatorio,
-      nome: nomeCasa,
-      imagem: 'https://images.unsplash.com/photo-1518780664697-55e3ad937233?q=80&w=250&auto=format&fit=crop', // Imagem padrão
-      adminId: usuarioAtual.id
+    if (!casaEncontrada) {
+      alert("Casa não encontrada! Verifique se o ID está correto.");
+      return;
+    }
+
+    const jaEMembro = membros.some(m => m.casaId === casaEncontrada.id && m.id === usuarioAtual.id);
+    const eLider = casaEncontrada.adminId === usuarioAtual.id;
+
+    if (jaEMembro || eLider) {
+      alert("Você já faz parte desta casa!");
+      return;
+    }
+
+    const novoMembro = { 
+      id: usuarioAtual.id, 
+      nome: usuarioAtual.nome, 
+      imagem: usuarioAtual.imagem, 
+      casaId: casaEncontrada.id 
     };
 
-    const concluirCriacao = () => {
-      // 👉 ANIMAÇÃO FLUIDA AO CRIAR
+    const concluirAcesso = () => {
+      // 👉 ANIMAÇÃO NA HORA DE CONFIRMAR O ACESSO
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      setCasas([...casas, novaCasa]);
+      setMembros([...membros, novoMembro]);
       setTelaAtual('Casas');
     };
 
     if (Platform.OS === 'web') {
-      window.alert(`Casa "${novaCasa.nome}" criada com sucesso! 🏡`);
-      concluirCriacao();
+      window.alert(`Sucesso! Você entrou na casa: ${casaEncontrada.nome} 🏡`);
+      concluirAcesso();
     } else {
-      Alert.alert("Sucesso! 🎉", `Casa "${novaCasa.nome}" criada!\nO ID de convite dela é: ${idAleatorio}`, [
-        { text: "Vamos lá!", onPress: concluirCriacao }
+      Alert.alert("Sucesso! 🎉", `Você entrou na casa: ${casaEncontrada.nome} 🏡`, [
+        { text: "Vamos lá!", onPress: concluirAcesso }
       ]);
     }
   };
@@ -63,44 +75,44 @@ export default function TelaNovaCasa({ setTelaAtual, casas, setCasas, usuarioAtu
           <FontAwesome5 name="paw" size={120} color="rgba(255, 255, 255, 0.2)" style={[styles.patinha, { top: -10, right: -20, transform: [{ rotate: '20deg' }] }]} />
           <FontAwesome5 name="paw" size={60} color="rgba(79, 127, 255, 0.4)" style={[styles.patinha, { bottom: 50, right: 100, transform: [{ rotate: '-10deg' }] }]} />
 
-          {/* 👉 CABEÇALHO (Agora com muito mais espaço para empurrar o cartão para baixo) */}
+          {/* 👉 CABEÇALHO COM BOTÃO DE VOLTAR SUAVE */}
           <View style={styles.areaCabecalho}>
             <TouchableOpacity onPress={handleVoltar} style={styles.botaoVoltar}>
               <Ionicons name="arrow-back" size={28} color="#FFF" />
             </TouchableOpacity>
             <View style={styles.textosCabecalho}>
-              <Text style={styles.tituloHeader}>Nova Casa</Text>
-              <Text style={styles.subTituloHeader}>Crie um lar para os pets</Text>
+              <Text style={styles.tituloHeader}>Convite</Text>
+              <Text style={styles.subTituloHeader}>Junte-se a uma casa</Text>
             </View>
           </View>
 
-          {/* 👉 CARTÃO BRANCO (Com marginTop para afastar da barra de notificações) */}
+          {/* 👉 CARTÃO BRANCO FELIZ E CLEAN */}
           <View style={styles.cardAlegre}>
             
             <View style={styles.areaIconeCentral}>
               <View style={styles.circuloIcone}>
-                <Feather name="home" size={40} color="#F86F03" />
+                <Feather name="key" size={40} color="#4F7FFF" />
               </View>
-              <Text style={styles.tituloSecao}>Nome do Lar</Text>
-              <Text style={styles.textoInstrucao}>Como você quer chamar essa nova casa? (ex: Casa da Praia, Sítio, Apartamento...)</Text>
+              <Text style={styles.tituloSecao}>Código de Acesso</Text>
+              <Text style={styles.textoInstrucao}>Digite o ID (código) fornecido pelo líder para entrar na casa e ajudar a cuidar dos pets!</Text>
             </View>
 
-            {/* Input Clean */}
+            {/* Input Clean com ícone embutido */}
             <View style={styles.areaInput}>
-              <Feather name="edit-3" size={20} color="#888" style={styles.iconeInput} />
+              <Feather name="hash" size={20} color="#888" style={styles.iconeInput} />
               <TextInput
                 style={styles.input}
-                placeholder="Nome da casa"
+                placeholder="Ex: 777"
                 placeholderTextColor="#A0A0A0"
-                value={nomeCasa}
-                onChangeText={setNomeCasa}
+                value={codigoCasa}
+                onChangeText={setCodigoCasa}
               />
             </View>
 
             {/* Botão Gordinho e Convidativo */}
-            <TouchableOpacity style={styles.botaoAcao} onPress={handleCriarCasa}>
-              <Text style={styles.textoBotaoAcao}>Criar Casa</Text>
-              <Feather name="check" size={22} color="#FFF" style={{ position: 'absolute', right: 20 }} />
+            <TouchableOpacity style={styles.botaoAcao} onPress={handleEntrarCasa}>
+              <Text style={styles.textoBotaoAcao}>Acessar Casa</Text>
+              <Feather name="arrow-right" size={22} color="#FFF" style={{ position: 'absolute', right: 20 }} />
             </TouchableOpacity>
 
           </View>
@@ -115,8 +127,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   patinha: { position: 'absolute', zIndex: 0 },
   
-  // 👉 AQUI FOI A MUDANÇA PRINCIPAL: paddingTop 40 e paddingBottom 60 empurram a tela branca para baixo
-  areaCabecalho: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 25, paddingTop: 40, paddingBottom: 60 },
+  areaCabecalho: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 25, paddingTop: 20, paddingBottom: 30 },
   botaoVoltar: { width: 50, height: 50, borderRadius: 25, backgroundColor: 'rgba(255,255,255,0.25)', justifyContent: 'center', alignItems: 'center', marginRight: 15 },
   textosCabecalho: { flex: 1 },
   tituloHeader: { fontSize: 28, fontWeight: '900', color: '#FFF', textShadowColor: 'rgba(0,0,0,0.2)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 3 },
@@ -127,10 +138,8 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 40,
     borderTopRightRadius: 40,
     paddingHorizontal: 30,
-    paddingTop: 45,
+    paddingTop: 40,
     flex: 1, 
-    // 👉 Adicionamos uma pequena margem no topo caso a tela ainda precise de mais "respiro"
-    marginTop: 10, 
     elevation: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -5 },
@@ -139,7 +148,7 @@ const styles = StyleSheet.create({
   },
 
   areaIconeCentral: { alignItems: 'center', marginBottom: 35 },
-  circuloIcone: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#FFF3E0', justifyContent: 'center', alignItems: 'center', marginBottom: 15, borderWidth: 2, borderColor: '#F86F03' },
+  circuloIcone: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#E3F2FD', justifyContent: 'center', alignItems: 'center', marginBottom: 15, borderWidth: 2, borderColor: '#4F7FFF' },
   tituloSecao: { fontSize: 24, fontWeight: '900', color: '#333', marginBottom: 10 },
   textoInstrucao: { fontSize: 15, color: '#666', textAlign: 'center', fontWeight: '500', lineHeight: 22 },
 
