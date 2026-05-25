@@ -1,40 +1,46 @@
 import React from 'react';
-// 👉 1. Adicionamos o 'Platform' na importação
-import { View, Text, TouchableOpacity, StyleSheet, Image, ScrollView, Alert, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Image, ScrollView, SafeAreaView, Alert, Platform, LayoutAnimation, UIManager } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { FontAwesome5, Ionicons, Feather } from '@expo/vector-icons';
 
+// 👉 MÁGICA DA FLUIDEZ: Habilita animações suaves no Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
 export default function TelaExcluirCasa({ setTelaAtual, casas, setCasas, pets, setPets, casaAtual, setCasaAtual, usuarioAtual }) {
+  
+  // O usuário só pode excluir as casas que ele mesmo criou (onde ele é o admin)
+  const minhasCasasParaExcluir = casas.filter(casa => casa.adminId === usuarioAtual?.id);
 
-  const handleExcluir = (idCasaParaExcluir) => {
-    const novasCasas = casas.filter((casa) => casa.id !== idCasaParaExcluir);
-    setCasas(novasCasas);
+  const handleExcluir = (casa) => {
+    const confirmarExclusao = () => {
+      // 👉 ANIMAÇÃO FLUIDA: Avisa o celular para animar a próxima mudança de tela!
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      
+      // Remove a casa da lista
+      setCasas(casas.filter(c => c.id !== casa.id));
+      
+      // Remove os pets que moravam nessa casa
+      setPets(pets.filter(p => p.casaId !== casa.id));
 
-    const novosPets = pets.filter((pet) => pet.casaId !== idCasaParaExcluir);
-    setPets(novosPets);
-
-    if (casaAtual?.id === idCasaParaExcluir) {
-      setCasaAtual(null);
-    }
-  };
-
-  // 👉 2. CORREÇÃO: O alerta agora funciona no Navegador (Web) e no Celular!
-  const confirmarExclusao = (idCasa, nomeCasa) => {
-    if (Platform.OS === 'web') {
-      // Usa o alerta padrão do navegador do PC
-      const confirmou = window.confirm(`Tem certeza que deseja excluir a "${nomeCasa}"? Todos os pets dessa casa também serão apagados!`);
-      if (confirmou) {
-        handleExcluir(idCasa);
+      // Se a casa excluída era a que estava aberta, limpa a memória
+      if (casaAtual?.id === casa.id) {
+        setCasaAtual(null);
       }
+    };
+
+    if (Platform.OS === 'web') {
+      const confirmou = window.confirm(`Cuidado! Tem certeza que deseja excluir a casa "${casa.nome}" permanentemente?`);
+      if (confirmou) confirmarExclusao();
     } else {
-      // Usa o alerta bonito e nativo do aplicativo (Expo Go no celular)
       Alert.alert(
-        "Atenção!", 
-        `Tem certeza que deseja excluir a "${nomeCasa}"? Todos os pets dessa casa também serão apagados!`, 
+        "Excluir Casa 🗑️",
+        `Tem certeza que deseja excluir a casa "${casa.nome}"? Todos os pets dela também serão apagados!`,
         [
           { text: "Cancelar", style: "cancel" },
-          { text: "Sim, excluir", onPress: () => handleExcluir(idCasa), style: "destructive" }
+          { text: "Sim, Excluir", onPress: confirmarExclusao, style: "destructive" }
         ]
       );
     }
@@ -42,64 +48,138 @@ export default function TelaExcluirCasa({ setTelaAtual, casas, setCasas, pets, s
 
   return (
     <LinearGradient colors={['#F86F03', '#4F7FFF']} style={styles.container}>
-      <StatusBar style="auto" />
+      <StatusBar style="light" />
 
-      <FontAwesome5 name="paw" size={80} color="rgba(248, 111, 3, 0.4)" style={[styles.patinha, { bottom: 50, right: 30, transform: [{ rotate: '-20deg' }] }]} />
-      <FontAwesome5 name="paw" size={60} color="rgba(248, 111, 3, 0.3)" style={[styles.patinha, { bottom: 150, right: 100, transform: [{ rotate: '-10deg' }] }]} />
+      <SafeAreaView style={{ flex: 1 }}>
+        
+        {/* Patinhas felizes de fundo */}
+        <FontAwesome5 name="paw" size={120} color="rgba(255, 255, 255, 0.2)" style={[styles.patinha, { top: -10, right: -20, transform: [{ rotate: '20deg' }] }]} />
+        <FontAwesome5 name="paw" size={60} color="rgba(79, 127, 255, 0.4)" style={[styles.patinha, { bottom: 50, right: 100, transform: [{ rotate: '-10deg' }] }]} />
 
-      <View style={styles.cabecalho}>
-        <TouchableOpacity onPress={() => setTelaAtual('Casas')}>
-          <Ionicons name="arrow-undo-outline" size={40} color="#CC5A00" />
-        </TouchableOpacity>
-      </View>
+        {/* 👉 CABEÇALHO (Com botão de voltar suave) */}
+        <View style={styles.areaCabecalho}>
+          <TouchableOpacity onPress={() => setTelaAtual('Casas')} style={styles.botaoVoltar}>
+            <Ionicons name="arrow-back" size={28} color="#FFF" />
+          </TouchableOpacity>
+          <View style={styles.textosCabecalho}>
+            <Text style={styles.tituloHeader}>Gerenciar</Text>
+            <Text style={styles.subTituloHeader}>Limpeza de ambientes</Text>
+          </View>
+        </View>
 
-      <Text style={styles.titulo}>Excluir Casa</Text>
+        {/* 👉 CARTÃO BRANCO PRINCIPAL */}
+        <View style={styles.cardAlegre}>
+          
+          <View style={styles.areaAviso}>
+            <Feather name="alert-triangle" size={30} color="#FF4C4C" style={{ marginBottom: 10 }} />
+            <Text style={styles.tituloSecao}>Excluir Casas</Text>
+            <Text style={styles.textoAviso}>Atenção: Ao excluir uma casa, todos os pets e membros associados a ela serão removidos.</Text>
+          </View>
 
-      <ScrollView style={styles.listaContainer} showsVerticalScrollIndicator={false}>
-        {casas.length > 0 ? (
-          casas.map((casa) => (
-            <View key={casa.id} style={styles.itemCasa}>
-              <Image source={{ uri: casa.imagem }} style={styles.imagemCasa} />
-              <Text style={styles.textoCasa}>{casa.nome}</Text>
-              
-              {/* Lógica de permissão do cadeado e lixeira */}
-              {casa.adminId === usuarioAtual.id ? (
-                <TouchableOpacity style={styles.botaoLixeira} onPress={() => confirmarExclusao(casa.id, casa.nome)}>
-                  <Feather name="trash-2" size={30} color="#CC5A00" />
-                </TouchableOpacity>
-              ) : (
-                <View style={styles.botaoSemPermissao}>
-                  <Feather name="lock" size={20} color="#666" />
-                  <Text style={styles.textoSemPermissao}>Apenas Admin</Text>
+          {/* Lista Fluida */}
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+            {minhasCasasParaExcluir.length > 0 ? (
+              minhasCasasParaExcluir.map((casa) => (
+                <View key={casa.id} style={styles.cartaoCasa}>
+                  <Image source={{ uri: casa.imagem }} style={styles.imagemCasa} />
+                  
+                  <View style={styles.infoCasa}>
+                    <Text style={styles.nomeCasa}>{casa.nome}</Text>
+                    <Text style={styles.statusCasa}>👑 Você é o líder</Text>
+                  </View>
+
+                  {/* Botão Vermelho de Excluir */}
+                  <TouchableOpacity style={styles.botaoLixeira} onPress={() => handleExcluir(casa)}>
+                    <Feather name="trash-2" size={22} color="#FFF" />
+                  </TouchableOpacity>
                 </View>
-              )}
-            </View>
-          ))
-        ) : (
-          <Text style={styles.textoVazio}>Nenhuma casa cadastrada.</Text>
-        )}
-        <View style={{ height: 40 }} />
-      </ScrollView>
+              ))
+            ) : (
+              // Estado Vazio Amigável
+              <View style={styles.areaVazia}>
+                <FontAwesome5 name="check-circle" size={50} color="#4F7FFF" style={{ marginBottom: 15 }} />
+                <Text style={styles.textoVazioAzul}>Tudo limpo!</Text>
+                <Text style={styles.subTextoVazio}>Você não tem nenhuma casa para excluir no momento.</Text>
+              </View>
+            )}
+          </ScrollView>
 
+        </View>
+
+      </SafeAreaView>
     </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 30, paddingTop: 50 },
+  container: { flex: 1 },
   patinha: { position: 'absolute', zIndex: 0 },
-  cabecalho: { marginBottom: 10, zIndex: 1, alignItems: 'flex-start' },
-  titulo: { fontSize: 40, fontWeight: '900', textAlign: 'center', marginBottom: 30, color: '#333' },
   
-  listaContainer: { flex: 1, zIndex: 1 },
-  itemCasa: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#333', padding: 15, borderRadius: 20, marginBottom: 15, borderWidth: 2, borderColor: '#111' },
-  imagemCasa: { width: 60, height: 60, borderRadius: 30, borderWidth: 2, borderColor: '#CC5A00', marginRight: 15 },
-  textoCasa: { flex: 1, fontSize: 18, fontWeight: 'bold', color: '#F86F03' },
-  
-  botaoLixeira: { backgroundColor: '#111', padding: 10, borderRadius: 50, borderWidth: 2, borderColor: '#CC5A00' },
-  
-  botaoSemPermissao: { alignItems: 'center', padding: 5 },
-  textoSemPermissao: { color: '#666', fontSize: 10, fontWeight: 'bold', marginTop: 5 },
-  
-  textoVazio: { fontSize: 18, color: '#333', fontStyle: 'italic', textAlign: 'center', marginTop: 20 }
+  areaCabecalho: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 25, paddingTop: 20, paddingBottom: 30 },
+  botaoVoltar: { width: 50, height: 50, borderRadius: 25, backgroundColor: 'rgba(255,255,255,0.25)', justifyContent: 'center', alignItems: 'center', marginRight: 15 },
+  textosCabecalho: { flex: 1 },
+  tituloHeader: { fontSize: 28, fontWeight: '900', color: '#FFF', textShadowColor: 'rgba(0,0,0,0.2)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 3 },
+  subTituloHeader: { fontSize: 16, color: 'rgba(255,255,255,0.9)', fontWeight: 'bold' },
+
+  cardAlegre: {
+    backgroundColor: '#FFF',
+    borderTopLeftRadius: 40,
+    borderTopRightRadius: 40,
+    paddingHorizontal: 25,
+    paddingTop: 30,
+    flex: 1, 
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -5 },
+    shadowOpacity: 0.15,
+    shadowRadius: 15
+  },
+
+  areaAviso: { alignItems: 'center', marginBottom: 25, backgroundColor: '#FFF0F0', padding: 20, borderRadius: 20, borderWidth: 2, borderColor: '#FFD6D6' },
+  tituloSecao: { fontSize: 22, fontWeight: '900', color: '#FF4C4C', marginBottom: 5 },
+  textoAviso: { fontSize: 14, color: '#D32F2F', textAlign: 'center', fontWeight: '600' },
+
+  // Estilo da Casa mantendo a identidade visual feliz
+  cartaoCasa: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: '#F0F4FF', 
+    padding: 15, 
+    borderRadius: 25, 
+    marginBottom: 15,
+    borderWidth: 2,
+    borderColor: '#E0E8FF' 
+  },
+  imagemCasa: { width: 65, height: 65, borderRadius: 32.5, borderWidth: 3, borderColor: '#4F7FFF' },
+  infoCasa: { flex: 1, marginLeft: 15 },
+  nomeCasa: { fontSize: 18, fontWeight: 'bold', color: '#333', marginBottom: 4 },
+  statusCasa: { fontSize: 13, color: '#4F7FFF', fontWeight: 'bold' },
+
+  // O botão de exclusão agora é uma lixeira vermelha flutuante
+  botaoLixeira: { 
+    width: 45, 
+    height: 45, 
+    borderRadius: 22.5, 
+    backgroundColor: '#FF4C4C', 
+    justifyContent: 'center', 
+    alignItems: 'center',
+    elevation: 5,
+    shadowColor: '#FF4C4C',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.4,
+    shadowRadius: 4
+  },
+
+  areaVazia: { 
+    alignItems: 'center', 
+    marginTop: 20, 
+    backgroundColor: '#F0F4FF', 
+    padding: 30, 
+    borderRadius: 25, 
+    borderWidth: 2, 
+    borderColor: '#4F7FFF', 
+    borderStyle: 'dashed' 
+  },
+  textoVazioAzul: { color: '#4F7FFF', fontSize: 20, fontWeight: '900', textAlign: 'center' },
+  subTextoVazio: { color: '#555', fontSize: 15, textAlign: 'center', marginTop: 8, fontWeight: '600' }
 });
