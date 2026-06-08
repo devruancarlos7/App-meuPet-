@@ -48,8 +48,8 @@ export default function App() {
   ]);
   const [agendamentos, setAgendamentos] = useState([]);
 
-  // 👉 ROTEAMENTO COM MODO NOTURNO INJETADO EM TODAS AS TELAS
-  if (telaAtual === 'Login') return <TelaDeLogin setTelaAtual={setTelaAtual} modoNoturno={modoNoturno} />;
+  // 👉 ROTEAMENTO COM MODO NOTURNO INJETADO EM TODAS AS TELA
+  if (telaAtual === 'Login') return <TelaDeLogin setTelaAtual={setTelaAtual} setUsuarioAtual={setUsuarioAtual} modoNoturno={modoNoturno} />;
   if (telaAtual === 'Cadastro') return <TelaDeCadastro setTelaAtual={setTelaAtual} modoNoturno={modoNoturno} />;
   if (telaAtual === 'Casas') return <ListaDeCasas setTelaAtual={setTelaAtual} casas={casas} setCasaAtual={setCasaAtual} usuarioAtual={usuarioAtual} membros={membros} modoNoturno={modoNoturno} />;
   if (telaAtual === 'NovaCasa') return <TelaNovaCasa setTelaAtual={setTelaAtual} casas={casas} setCasas={setCasas} usuarioAtual={usuarioAtual} modoNoturno={modoNoturno} />;

@@ -4,20 +4,43 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar'; 
 import { Feather, Ionicons } from '@expo/vector-icons';
 
-// 👉 RECEBENDO A VARIÁVEL modoNoturno
+// 👉 RECEBENDO A VARIÁVEL 
 export default function TelaDeCadastro({ setTelaAtual, modoNoturno }) { 
   const [nome, setNome] = useState(''); 
   const [email, setEmail] = useState(''); 
   const [senha, setSenha] = useState(''); 
   const [confirmarSenha, setConfirmarSenha] = useState('');
 
-  const handleCadastro = () => { 
-    if (nome.trim() === '' || email.trim() === '' || senha.trim() === '' || confirmarSenha.trim() === '') { 
-      alert('Por favor, preencha todos os campos!'); 
-      return; 
-    } 
-    alert('Cadastro realizado com sucesso!');
-    setTelaAtual('Casas'); 
+  const handleCadastro = async () => {
+    if (nome.trim() === '' || email.trim() === '' || senha.trim() === '' || confirmarSenha.trim() === '') {
+      alert('Por favor, preencha todos os campos!');
+      return;
+    }
+
+    if (senha !== confirmarSenha) {
+      alert('As senhas não coincidem!');
+      return;
+    }
+
+    try {
+      const resposta = await fetch('http://192.168.1.180:3000/cadastro', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nome: nome, email: email, senha: senha }),
+      });
+
+      const dados = await resposta.json();
+
+      if (dados.sucesso) {
+        alert('🎉 ' + dados.mensagem);
+        setTelaAtual('Login');
+      } else {
+        alert('Ops: ' + dados.mensagem);
+      }
+    } catch (error) {
+      console.error(error);
+      alert('Erro ao conectar com o servidor!');
+    }
   };
 
   // 👉 CORES DINÂMICAS DO MODO NOTURNO
