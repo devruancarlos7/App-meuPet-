@@ -6,7 +6,7 @@ import { FontAwesome5, Ionicons, Feather } from '@expo/vector-icons';
 import * as Notifications from 'expo-notifications';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
-// 👉 IGNORA A TELA VERMELHA DE AVISO DO EXPO GO
+// 👉 IGORA A TELA VERMELHA DE AVISO DO EXPO GO
 LogBox.ignoreLogs(['expo-notifications: Android Push notifications']);
 
 // 👉 MÁGICA DA FLUIDEZ
