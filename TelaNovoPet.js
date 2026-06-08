@@ -10,7 +10,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-export default function TelaNovoPet({ setTelaAtual, pets, setPets, casaAtual }) {
+export default function TelaNovoPet({ setTelaAtual, pets, setPets, casaAtual, modoNoturno }) {
   
   const [nome, setNome] = useState('');
   const [tipo, setTipo] = useState('');
@@ -77,9 +77,19 @@ export default function TelaNovoPet({ setTelaAtual, pets, setPets, casaAtual }) 
     setTelaAtual('ListaDePets');
   };
 
+  // 👉 CORES DO MODO NOTURNO
+  const coresFundo = modoNoturno ? ['#121212', '#2C3E50'] : ['#F86F03', '#4F7FFF'];
+  const corCartao = modoNoturno ? '#1E1E1E' : '#FFF';
+  const corTextoPrincipal = modoNoturno ? '#FFF' : '#333';
+  const corInputFundo = modoNoturno ? '#2A2A2A' : '#F4F5F7';
+  const corInputBorda = modoNoturno ? '#444' : '#EAEAEA';
+  const corFotoFundo = modoNoturno ? '#331E0B' : '#FFF3E0';
+  const corFotoBorda = modoNoturno ? '#663C16' : '#FFD1A3';
+  const corPlaceholder = modoNoturno ? '#888' : '#A0A0A0';
+
   return (
-    <LinearGradient colors={['#F86F03', '#4F7FFF']} style={styles.container}>
-      <StatusBar style="light" />
+    <LinearGradient colors={coresFundo} style={styles.container}>
+      <StatusBar style={modoNoturno ? "light" : "auto"} />
 
       <SafeAreaView style={{ flex: 1 }}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
@@ -100,7 +110,7 @@ export default function TelaNovoPet({ setTelaAtual, pets, setPets, casaAtual }) 
           </View>
 
           {/* 👉 CARTÃO BRANCO REBAIXADO COM SCROLLVIEW */}
-          <View style={styles.cardAlegre}>
+          <View style={[styles.cardAlegre, { backgroundColor: corCartao }]}>
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
               
               {/* AREA DA FOTO DO PET */}
@@ -109,62 +119,62 @@ export default function TelaNovoPet({ setTelaAtual, pets, setPets, casaAtual }) 
                   {imagemSelecionada ? (
                     <Image source={{ uri: imagemSelecionada }} style={styles.imagemPet} />
                   ) : (
-                    <View style={styles.bolinhaFotoVazia}>
+                    <View style={[styles.bolinhaFotoVazia, { backgroundColor: corFotoFundo, borderColor: corFotoBorda }]}>
                       <FontAwesome5 name="camera" size={35} color="#F86F03" />
                       <Text style={styles.textoAddFoto}>Foto</Text>
                     </View>
                   )}
-                  <View style={styles.iconeEdicaoPet}>
+                  <View style={[styles.iconeEdicaoPet, { borderColor: corCartao }]}>
                      <Feather name="plus" size={18} color="#FFF" />
                   </View>
                 </TouchableOpacity>
               </View>
 
-              <Text style={styles.tituloSecao}>Informações do Pet</Text>
+              <Text style={[styles.tituloSecao, { color: corTextoPrincipal }]}>Informações do Pet</Text>
 
               {/* INPUT NOME */}
-              <View style={styles.areaInput}>
+              <View style={[styles.areaInput, { backgroundColor: corInputFundo, borderColor: corInputBorda }]}>
                 <Feather name="edit-3" size={20} color="#888" style={styles.iconeInput} />
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { color: corTextoPrincipal }]}
                   placeholder="Nome do pet"
-                  placeholderTextColor="#A0A0A0"
+                  placeholderTextColor={corPlaceholder}
                   value={nome}
                   onChangeText={setNome}
                 />
               </View>
 
               {/* INPUT TIPO (Ex: Cachorro, Gato, Pássaro) */}
-              <View style={styles.areaInput}>
+              <View style={[styles.areaInput, { backgroundColor: corInputFundo, borderColor: corInputBorda }]}>
                 <FontAwesome5 name="paw" size={18} color="#888" style={styles.iconeInput} />
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { color: corTextoPrincipal }]}
                   placeholder="Tipo de pet (Ex: Cachorro, Gato)"
-                  placeholderTextColor="#A0A0A0"
+                  placeholderTextColor={corPlaceholder}
                   value={tipo}
                   onChangeText={setTipo}
                 />
               </View>
 
               {/* INPUT RAÇA */}
-              <View style={styles.areaInput}>
+              <View style={[styles.areaInput, { backgroundColor: corInputFundo, borderColor: corInputBorda }]}>
                 <Feather name="tag" size={20} color="#888" style={styles.iconeInput} />
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { color: corTextoPrincipal }]}
                   placeholder="Raça"
-                  placeholderTextColor="#A0A0A0"
+                  placeholderTextColor={corPlaceholder}
                   value={raca}
                   onChangeText={setRaca}
                 />
               </View>
 
               {/* INPUT NASCIMENTO */}
-              <View style={styles.areaInput}>
+              <View style={[styles.areaInput, { backgroundColor: corInputFundo, borderColor: corInputBorda }]}>
                 <Feather name="calendar" size={20} color="#888" style={styles.iconeInput} />
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, { color: corTextoPrincipal }]}
                   placeholder="Data de Nascimento / Idade"
-                  placeholderTextColor="#A0A0A0"
+                  placeholderTextColor={corPlaceholder}
                   value={nascimento}
                   onChangeText={setNascimento}
                 />

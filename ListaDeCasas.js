@@ -1,101 +1,124 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Image, ScrollView, SafeAreaView } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Image, ScrollView, SafeAreaView, Platform, LayoutAnimation, UIManager } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { FontAwesome5, Ionicons, Feather } from '@expo/vector-icons';
 
-export default function ListaDeCasas({ setTelaAtual, casas, setCasaAtual, usuarioAtual, membros }) {
+// Mágica da animação no Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+// 👉 AGORA A TELA RECEBE A VARIÁVEL modoNoturno
+export default function ListaDeCasas({ setTelaAtual, casas, setCasaAtual, usuarioAtual, membros, modoNoturno }) {
   
-  const minhasCasas = casas.filter(casa => 
-    casa.adminId === usuarioAtual?.id || membros.some(m => m.casaId === casa.id && m.id === usuarioAtual?.id)
-  );
+  const minhasCasas = casas?.filter(casa => 
+    casa.adminId === usuarioAtual?.id || membros?.some(m => m.casaId === casa.id && m.id === usuarioAtual?.id) 
+  ) || [];
+
+  const navegarComAnimacao = (tela) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setTelaAtual(tela);
+  };
+
+  const entrarNaCasa = (casa) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setCasaAtual(casa);
+    setTelaAtual('ListaDePets');
+  };
+
+  // 👉 CORES DINÂMICAS DO MODO NOTURNO
+  const coresFundo = modoNoturno ? ['#121212', '#2C3E50'] : ['#F86F03', '#4F7FFF'];
+  const corCartao = modoNoturno ? '#1E1E1E' : '#FFF';
+  const corTextoPrincipal = modoNoturno ? '#FFF' : '#333';
+  
+  const corAcaoFundo = modoNoturno ? '#2A2A2A' : '#FFF';
+  
+  const corCasaFundo = modoNoturno ? '#232D3F' : '#F0F4FF';
+  const corCasaBorda = modoNoturno ? '#1A2333' : '#E0E8FF';
+
+  const corVaziaFundo = modoNoturno ? '#331E0B' : '#FFF3E0';
+  const corVaziaBorda = modoNoturno ? '#663C16' : '#F86F03';
 
   return (
-    <LinearGradient colors={['#F86F03', '#4F7FFF']} style={styles.container}>
-      <StatusBar style="light" />
-
+    <LinearGradient colors={coresFundo} style={styles.container}>
+      <StatusBar style={modoNoturno ? "light" : "auto"} />
+      
       <SafeAreaView style={{ flex: 1 }}>
-        
-        {/* 👉 AS PATINHAS VOLTARAM! Mais visíveis, coloridas e divertidas */}
-        <FontAwesome5 name="paw" size={120} color="rgba(255, 255, 255, 0.2)" style={[styles.patinha, { top: -10, right: -20, transform: [{ rotate: '20deg' }] }]} />
-        <FontAwesome5 name="paw" size={80} color="rgba(248, 111, 3, 0.4)" style={[styles.patinha, { bottom: 150, right: 30, transform: [{ rotate: '-15deg' }] }]} />
-        <FontAwesome5 name="paw" size={60} color="rgba(79, 127, 255, 0.4)" style={[styles.patinha, { bottom: 50, right: 100, transform: [{ rotate: '-10deg' }] }]} />
-
-        {/* 👉 CABEÇALHO ALEGRE */}
+        {/* CABEÇALHO */}
         <View style={styles.areaCabecalho}>
           <View>
-            <Text style={styles.saudacao}>Olá, {usuarioAtual?.nome.split(' ')}! 🐾</Text>
-            <Text style={styles.subSaudacao}>Vamos cuidar dos pets hoje?</Text>
+            <Text style={styles.saudacao}>Olá, {usuarioAtual?.nome?.split(' ')}!</Text>
+            <Text style={styles.subSaudacao}>Suas casas</Text>
           </View>
-          <TouchableOpacity onPress={() => setTelaAtual('Principal')} style={styles.botaoSair}>
-            <Feather name="log-out" size={26} color="#FFF" />
+          <TouchableOpacity onPress={() => navegarComAnimacao('Principal')} style={styles.botaoSair}>
+            <Feather name="log-out" size={24} color="#FFF" />
           </TouchableOpacity>
         </View>
 
-        {/* 👉 CARTÃO PRINCIPAL (Branco, mas repleto de cor por dentro) */}
-        <View style={styles.cardAlegre}>
-          
-          {/* Botões Coloridos e Sólidos (Dá vontade de clicar!) */}
-          <View style={styles.areaAcoes}>
-            <TouchableOpacity style={styles.cartaoAcao} onPress={() => setTelaAtual('NovaCasa')}>
-              <View style={[styles.iconeAcaoFundo, { backgroundColor: '#F86F03', shadowColor: '#F86F03' }]}>
-                 <Feather name="plus" size={32} color="#FFF" />
-              </View>
-              <Text style={styles.textoAcao}>Criar</Text>
-            </TouchableOpacity>
+        {/* CARTÃO ALEGRE QUE MUDA DE COR */}
+        <View style={[styles.cardAlegre, { backgroundColor: corCartao }]}>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 50 }}>
+            
+            {/* ÁREA DE AÇÕES COM CORES DINÂMICAS */}
+            <View style={styles.areaAcoes}>
+              <TouchableOpacity style={styles.cartaoAcao} onPress={() => navegarComAnimacao('NovaCasa')}>
+                <View style={[styles.iconeAcaoFundo, { backgroundColor: corAcaoFundo }]}>
+                  <Feather name="plus" size={32} color="#F86F03" />
+                </View>
+                <Text style={[styles.textoAcao, { color: corTextoPrincipal }]}>Nova Casa</Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity style={styles.cartaoAcao} onPress={() => setTelaAtual('EntrarCasa')}>
-              <View style={[styles.iconeAcaoFundo, { backgroundColor: '#4F7FFF', shadowColor: '#4F7FFF' }]}>
-                 <Feather name="log-in" size={32} color="#FFF" />
-              </View>
-              <Text style={styles.textoAcao}>Entrar</Text>
-            </TouchableOpacity>
+              <TouchableOpacity style={styles.cartaoAcao} onPress={() => navegarComAnimacao('EntrarCasa')}>
+                <View style={[styles.iconeAcaoFundo, { backgroundColor: corAcaoFundo }]}>
+                  <Feather name="log-in" size={32} color="#4F7FFF" />
+                </View>
+                <Text style={[styles.textoAcao, { color: corTextoPrincipal }]}>Entrar</Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity style={styles.cartaoAcao} onPress={() => setTelaAtual('ExcluirCasa')}>
-              <View style={[styles.iconeAcaoFundo, { backgroundColor: '#FF4C4C', shadowColor: '#FF4C4C' }]}>
-                 <Feather name="trash-2" size={32} color="#FFF" />
-              </View>
-              <Text style={styles.textoAcao}>Excluir</Text>
-            </TouchableOpacity>
-          </View>
+              <TouchableOpacity style={styles.cartaoAcao} onPress={() => navegarComAnimacao('ExcluirCasa')}>
+                <View style={[styles.iconeAcaoFundo, { backgroundColor: corAcaoFundo }]}>
+                  <Feather name="settings" size={32} color="#FF4C4C" />
+                </View>
+                <Text style={[styles.textoAcao, { color: corTextoPrincipal }]}>Ajustes</Text>
+              </TouchableOpacity>
+            </View>
 
-          <Text style={styles.tituloSecao}>Suas Casas 🏡</Text>
+            <Text style={[styles.tituloSecao, { color: corTextoPrincipal }]}>Ambientes</Text>
 
-          {/* Lista de Casas Vibrante */}
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+            {/* LISTA DE CASAS OU ESTADO VAZIO */}
             {minhasCasas.length > 0 ? (
               minhasCasas.map((casa) => (
                 <TouchableOpacity 
                   key={casa.id} 
-                  style={styles.cartaoCasa} 
-                  onPress={() => { setCasaAtual(casa); setTelaAtual('ListaDePets'); }}
+                  style={[styles.cartaoCasa, { backgroundColor: corCasaFundo, borderColor: corCasaBorda }]} 
+                  onPress={() => entrarNaCasa(casa)}
                 >
-                  <Image source={{ uri: casa.imagem }} style={styles.imagemCasa} />
+                  <Image source={{ uri: casa.imagem || 'https://via.placeholder.com/150' }} style={styles.imagemCasa} />
                   
                   <View style={styles.infoCasa}>
-                    <Text style={styles.nomeCasa}>{casa.nome}</Text>
-                    {/* Status colorido puxando a sua marca! */}
+                    <Text style={[styles.nomeCasa, { color: corTextoPrincipal }]} numberOfLines={1}>
+                      {casa.nome}
+                    </Text>
                     <Text style={styles.statusCasa}>
-                      {casa.adminId === usuarioAtual?.id ? '👑 Líder' : '🐶 Convidado'}
+                      {casa.adminId === usuarioAtual?.id ? 'Administrador' : 'Membro'}
                     </Text>
                   </View>
 
-                  {/* Setinha Laranja Sólida */}
                   <View style={styles.botaoSeta}>
                     <Feather name="chevron-right" size={24} color="#FFF" />
                   </View>
                 </TouchableOpacity>
               ))
             ) : (
-              // Tela vazia muito mais fofa!
-              <View style={styles.areaVazia}>
-                <FontAwesome5 name="bone" size={50} color="#F86F03" style={{ marginBottom: 15 }} />
-                <Text style={styles.textoVazio}>Nenhuma casa ainda!</Text>
-                <Text style={styles.subTextoVazio}>Crie ou entre em uma para começar a cuidar dos bichinhos.</Text>
+              <View style={[styles.areaVazia, { backgroundColor: corVaziaFundo, borderColor: corVaziaBorda }]}>
+                <Feather name="home" size={40} color="#F86F03" style={{ marginBottom: 15 }} />
+                <Text style={styles.textoVazio}>Nenhuma casa ainda</Text>
+                <Text style={[styles.subTextoVazio, { color: corTextoPrincipal }]}>Crie uma nova ou entre usando um código!</Text>
               </View>
             )}
-          </ScrollView>
 
+          </ScrollView>
         </View>
 
       </SafeAreaView>
@@ -112,79 +135,26 @@ const styles = StyleSheet.create({
   subSaudacao: { fontSize: 16, color: 'rgba(255,255,255,0.9)', fontWeight: 'bold' },
   botaoSair: { width: 50, height: 50, borderRadius: 25, backgroundColor: 'rgba(255,255,255,0.25)', justifyContent: 'center', alignItems: 'center' },
 
-  cardAlegre: {
-    backgroundColor: '#FFF',
-    borderTopLeftRadius: 40,
-    borderTopRightRadius: 40,
-    paddingHorizontal: 25,
-    paddingTop: 35,
-    flex: 1, 
-    elevation: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -5 },
-    shadowOpacity: 0.15,
-    shadowRadius: 15
-  },
-
+  cardAlegre: { backgroundColor: '#FFF', borderTopLeftRadius: 40, borderTopRightRadius: 40, paddingHorizontal: 25, paddingTop: 35, flex: 1, elevation: 10, shadowColor: '#000', shadowOffset: { width: 0, height: -5 }, shadowOpacity: 0.15, shadowRadius: 15 },
+  
   areaAcoes: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 35, paddingHorizontal: 5 },
   cartaoAcao: { alignItems: 'center', flex: 1 },
-  iconeAcaoFundo: { 
-    width: 70, 
-    height: 70, 
-    borderRadius: 35, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    marginBottom: 10,
-    elevation: 8,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5
-  },
+  iconeAcaoFundo: { width: 70, height: 70, borderRadius: 35, justifyContent: 'center', alignItems: 'center', marginBottom: 10, elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 5 },
   textoAcao: { color: '#333', fontSize: 15, fontWeight: '900' },
-
+  
   tituloSecao: { fontSize: 24, fontWeight: '900', color: '#333', marginBottom: 20, paddingHorizontal: 5 },
-
+  
   // Estilo super amigável para a casa, com azul bebê
-  cartaoCasa: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    backgroundColor: '#F0F4FF', // Azul bem clarinho para dar vivacidade
-    padding: 15, 
-    borderRadius: 25, 
-    marginBottom: 15,
-    borderWidth: 2,
-    borderColor: '#E0E8FF' 
-  },
+  cartaoCasa: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F0F4FF', padding: 15, borderRadius: 25, marginBottom: 15, borderWidth: 2, borderColor: '#E0E8FF' },
   imagemCasa: { width: 70, height: 70, borderRadius: 35, borderWidth: 3, borderColor: '#4F7FFF' },
   infoCasa: { flex: 1, marginLeft: 15 },
   nomeCasa: { fontSize: 20, fontWeight: 'bold', color: '#333', marginBottom: 4 },
   statusCasa: { fontSize: 14, color: '#F86F03', fontWeight: 'bold' },
-
-  botaoSeta: { 
-    width: 40, 
-    height: 40, 
-    borderRadius: 20, 
-    backgroundColor: '#F86F03', 
-    justifyContent: 'center', 
-    alignItems: 'center',
-    elevation: 5,
-    shadowColor: '#F86F03',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.4,
-    shadowRadius: 4
-  },
-
+  
+  botaoSeta: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F86F03', justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: '#F86F03', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.4, shadowRadius: 4 },
+  
   // Um estado vazio chamativo e temático
-  areaVazia: { 
-    alignItems: 'center', 
-    marginTop: 40, 
-    backgroundColor: '#FFF3E0', 
-    padding: 30, 
-    borderRadius: 25, 
-    borderWidth: 2, 
-    borderColor: '#F86F03', 
-    borderStyle: 'dashed' 
-  },
+  areaVazia: { alignItems: 'center', marginTop: 40, backgroundColor: '#FFF3E0', padding: 30, borderRadius: 25, borderWidth: 2, borderColor: '#F86F03', borderStyle: 'dashed' },
   textoVazio: { color: '#F86F03', fontSize: 20, fontWeight: '900', textAlign: 'center' },
   subTextoVazio: { color: '#333', fontSize: 16, textAlign: 'center', marginTop: 8, fontWeight: '600' }
 });
