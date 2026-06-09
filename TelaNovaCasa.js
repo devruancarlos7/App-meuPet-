@@ -4,6 +4,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { FontAwesome5, Ionicons, Feather } from '@expo/vector-icons';
 
+const API_URL = 'http://192.168.12.95:3000';
+
 // 👉 MÁGICA DA FLUIDEZ: Habilita animações suaves no Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -28,7 +30,7 @@ export default function TelaNovaCasa({ setTelaAtual, casas, setCasas, usuarioAtu
 
     try {
       // ⚠️ ATENÇÃO: Troque "SEU_IP" pelo IP atual do seu notebook!
-      const resposta = await fetch('http://10.227.115.10:3000/casas', {
+      const resposta = await fetch(`${API_URL}/casas`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -41,6 +43,16 @@ export default function TelaNovaCasa({ setTelaAtual, casas, setCasas, usuarioAtu
       const dados = await resposta.json();
 
       if (dados.sucesso) {
+        if (dados.casa) {
+          const casaCriada = {
+            ...dados.casa,
+            adminId: dados.casa.adminId ?? dados.casa.admin_id,
+            admin_id: dados.casa.admin_id ?? dados.casa.adminId,
+          };
+
+          setCasas([...casas, casaCriada]);
+        }
+
         alert('🎉 ' + dados.mensagem);
         handleVoltar();
       } else {

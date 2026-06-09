@@ -4,46 +4,169 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { Feather, Ionicons } from '@expo/vector-icons';
 
+const API_URL = 'http://192.168.12.95:3000';
+
 // 👉 RECEBENDO A VARIÁVEL modoNoturno
 export default function TelaDeCadastro({ setTelaAtual, modoNoturno }) {
   const [nome, setNome] = useState('');
   const [email, setEmail] = useState('');
+  const [cpf, setCpf] = useState('');
+  const [telefone, setTelefone] = useState('');
   const [senha, setSenha] = useState('');
   const [confirmarSenha, setConfirmarSenha] = useState('');
 
+  const limparNumeros = (valor) => valor.replace(/\D/g, '');
+
+  const validarEmail = (emailDigitado) => {
+    const emailLimpo = emailDigitado.trim().toLowerCase();
+    const regexEmail = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+    return regexEmail.test(emailLimpo);
+  };
+
+  const validarSenha = (senhaDigitada) => {
+    const temMaisDeSeis = senhaDigitada.length > 6;
+    const temLetra = /[A-Za-z]/.test(senhaDigitada);
+    const temNumero = /\d/.test(senhaDigitada);
+    return temMaisDeSeis && temLetra && temNumero;
+  };
+
+  const validarCPF = (cpfDigitado) => {
+    const numeros = limparNumeros(cpfDigitado);
+
+    // CPF é opcional. Se estiver vazio, passa na validação.
+    if (numeros.length === 0) return true;
+
+    if (numeros.length !== 11) return false;
+    if (/^(\d)\1+$/.test(numeros)) return false;
+
+    let soma = 0;
+    for (let i = 0; i < 9; i++) {
+      soma += parseInt(numeros.charAt(i), 10) * (10 - i);
+    }
+    let resto = (soma * 10) % 11;
+    if (resto === 10 || resto === 11) resto = 0;
+    if (resto !== parseInt(numeros.charAt(9), 10)) return false;
+
+    soma = 0;
+    for (let i = 0; i < 10; i++) {
+      soma += parseInt(numeros.charAt(i), 10) * (11 - i);
+    }
+    resto = (soma * 10) % 11;
+    if (resto === 10 || resto === 11) resto = 0;
+
+    return resto === parseInt(numeros.charAt(10), 10);
+  };
+
+  const validarTelefone = (telefoneDigitado) => {
+    const numeros = limparNumeros(telefoneDigitado);
+
+    // Telefone é opcional. Se estiver vazio, passa na validação.
+    if (numeros.length === 0) return true;
+
+    // Aceita telefone com DDD: 10 dígitos fixo ou 11 dígitos celular.
+    return numeros.length === 10 || numeros.length === 11;
+  };
+
+  const formatarCPF = (valor) => {
+    const numeros = limparNumeros(valor).slice(0, 11);
+
+    return numeros
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+  };
+
+  const formatarTelefone = (valor) => {
+    const numeros = limparNumeros(valor).slice(0, 11);
+
+    if (numeros.length <= 10) {
+      return numeros
+        .replace(/(\d{2})(\d)/, '($1) $2')
+        .replace(/(\d{4})(\d)/, '$1-$2');
+    }
+
+    return numeros
+      .replace(/(\d{2})(\d)/, '($1) $2')
+      .replace(/(\d{5})(\d)/, '$1-$2');
+  };
+
   const handleCadastro = async () => {
-    // 1. Verifica se tem algo em branco
-    if (nome.trim() === '' || email.trim() === '' || senha.trim() === '' || confirmarSenha.trim() === '') {
-      alert('Por favor, preencha todos os campos!');
+    const nomeLimpo = nome.trim();
+    const emailLimpo = email.trim().toLowerCase();
+    const cpfLimpo = limparNumeros(cpf);
+    const telefoneLimpo = limparNumeros(telefone);
+
+    // 👉 PRIORIDADES DE VALIDAÇÃO
+    if (nomeLimpo === '') {
+      alert('Informe seu nome para continuar.');
       return;
     }
 
-    // 2. Verifica se as senhas são iguais
+    if (emailLimpo === '') {
+      alert('Informe seu e-mail para continuar.');
+      return;
+    }
+
+    if (!validarEmail(emailLimpo)) {
+      alert('Digite um e-mail válido. Exemplo: nome@email.com');
+      return;
+    }
+
+    if (senha.trim() === '') {
+      alert('Informe sua senha para continuar.');
+      return;
+    }
+
+    if (!validarSenha(senha)) {
+      alert('A senha precisa ter mais de 6 caracteres e conter letras e números.');
+      return;
+    }
+
+    if (confirmarSenha.trim() === '') {
+      alert('Confirme sua senha para continuar.');
+      return;
+    }
+
     if (senha !== confirmarSenha) {
       alert('As senhas não coincidem!');
       return;
     }
 
+    if (!validarCPF(cpf)) {
+      alert('CPF inválido. Corrija ou deixe o campo vazio.');
+      return;
+    }
+
+    if (!validarTelefone(telefone)) {
+      alert('Telefone inválido. Use DDD + número ou deixe o campo vazio.');
+      return;
+    }
+
     try {
-      // ⚠️ ATENÇÃO: Troque "SEU_IP" pelo IP atual do seu notebook! (ex: 192.168.1.XXX)
-      const resposta = await fetch('http://192.168.1.245:3000/cadastro', {
+      // ⚠️ ATENÇÃO: Troque o IP acima pelo IP atual do seu notebook! (ex: 192.168.1.XXX)
+      const resposta = await fetch(`${API_URL}/cadastro`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome: nome, email: email, senha: senha })
+        body: JSON.stringify({
+          nome: nomeLimpo,
+          email: emailLimpo,
+          senha: senha,
+          cpf: cpfLimpo || null,
+          telefone: telefoneLimpo || null
+        })
       });
 
       const dados = await resposta.json();
 
-      if (dados.sucesso || resposta.ok) {
+      if (dados.sucesso) {
         alert('🎉 Usuário cadastrado com sucesso!');
-        // Se deu certo, manda o usuário direto para a tela de Login
         setTelaAtual('Login');
       } else {
         alert('Ops: ' + (dados.mensagem || 'Erro ao cadastrar.'));
       }
     } catch (error) {
       console.error(error);
-      alert('Erro ao conectar com o servidor! Verifique se o IP mudou.');
+      alert('Erro ao conectar com o servidor! Verifique se o servidor está ligado e se o IP está correto.');
     }
   };
 
@@ -93,6 +216,30 @@ export default function TelaDeCadastro({ setTelaAtual, modoNoturno }) {
                   autoCapitalize="none"
                   value={email}
                   onChangeText={setEmail}
+                />
+              </View>
+
+              <View style={[styles.areaInput, { backgroundColor: corInputFundo }]}>
+                <Feather name="credit-card" size={20} color={corTextoSecundario} style={styles.iconeInput} />
+                <TextInput
+                  style={[styles.input, { color: corTextoPrincipal }]}
+                  placeholder="CPF (opcional)"
+                  placeholderTextColor={corTextoSecundario}
+                  keyboardType="numeric"
+                  value={cpf}
+                  onChangeText={(texto) => setCpf(formatarCPF(texto))}
+                />
+              </View>
+
+              <View style={[styles.areaInput, { backgroundColor: corInputFundo }]}>
+                <Feather name="phone" size={20} color={corTextoSecundario} style={styles.iconeInput} />
+                <TextInput
+                  style={[styles.input, { color: corTextoPrincipal }]}
+                  placeholder="Telefone (opcional)"
+                  placeholderTextColor={corTextoSecundario}
+                  keyboardType="phone-pad"
+                  value={telefone}
+                  onChangeText={(texto) => setTelefone(formatarTelefone(texto))}
                 />
               </View>
 

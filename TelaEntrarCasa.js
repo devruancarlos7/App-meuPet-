@@ -4,11 +4,20 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar'; 
 import { FontAwesome5, Ionicons, Feather } from '@expo/vector-icons';
 
+const API_URL = 'http://192.168.12.95:3000';
+
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) { 
   UIManager.setLayoutAnimationEnabledExperimental(true); 
 }
 
-export default function TelaEntrarCasa({ setTelaAtual, casas, membros, setMembros, usuarioAtual, modoNoturno }) {
+const normalizarCasa = (casa) => ({
+  ...casa,
+  adminId: casa.adminId ?? casa.admin_id,
+  admin_id: casa.admin_id ?? casa.adminId,
+  papel: casa.papel,
+});
+
+export default function TelaEntrarCasa({ setTelaAtual, casas, setCasas, setCasaAtual, membros, setMembros, usuarioAtual, modoNoturno }) {
 
   const [codigoCasa, setCodigoCasa] = useState('');
 
@@ -17,12 +26,83 @@ export default function TelaEntrarCasa({ setTelaAtual, casas, membros, setMembro
     setTelaAtual('Casas'); 
   };
 
-  const handleEntrarCasa = () => { 
+  const handleEntrarCasa = async () => { 
     if (codigoCasa.trim() === '') { 
       alert("Por favor, digite o ID da casa!"); 
       return; 
     }
-    handleVoltar();
+
+    if (!usuarioAtual?.id) {
+      alert('Usuário não identificado. Faça login novamente.');
+      return;
+    }
+
+    try {
+      const resposta = await fetch(`${API_URL}/casas/entrar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          codigo: codigoCasa,
+          usuario_id: usuarioAtual.id,
+        }),
+      });
+
+      const dados = await resposta.json();
+
+      if (dados.sucesso) {
+        const casaRecebida = normalizarCasa(dados.casa);
+
+        if (setCasas) {
+          setCasas((listaAtual) => {
+            const listaSegura = Array.isArray(listaAtual) ? listaAtual : casas || [];
+            const jaExiste = listaSegura.some(c => String(c.id) === String(casaRecebida.id));
+
+            if (jaExiste) {
+              return listaSegura.map(c => String(c.id) === String(casaRecebida.id) ? casaRecebida : c);
+            }
+
+            return [casaRecebida, ...listaSegura];
+          });
+        }
+
+        if (setCasaAtual) {
+          setCasaAtual(casaRecebida);
+        }
+
+        if (setMembros) {
+          setMembros((listaAtual) => {
+            const listaSegura = Array.isArray(listaAtual) ? listaAtual : membros || [];
+            const jaExiste = listaSegura.some(m =>
+              String(m.id) === String(usuarioAtual.id) &&
+              String(m.casaId ?? m.casa_id) === String(casaRecebida.id)
+            );
+
+            if (jaExiste) return listaSegura;
+
+            return [
+              ...listaSegura,
+              {
+                id: usuarioAtual.id,
+                nome: usuarioAtual.nome,
+                imagem: usuarioAtual.imagem || 'https://cdn-icons-png.flaticon.com/512/149/149071.png',
+                casaId: casaRecebida.id,
+                casa_id: casaRecebida.id,
+                tipo: 'membro',
+              }
+            ];
+          });
+        }
+
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        alert(dados.mensagem || 'Você entrou na casa!');
+        setTelaAtual('Casas');
+      } else {
+        alert('Ops: ' + (dados.mensagem || 'Não foi possível entrar na casa.'));
+      }
+    } catch (error) {
+      console.error(error);
+      alert('Erro ao conectar com o servidor para entrar na casa!');
+    }
   };
 
   const coresFundo = modoNoturno ? ['#121212', '#2C3E50'] : ['#F86F03', '#4F7FFF'];

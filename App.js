@@ -20,52 +20,85 @@ import TelaConfigurarCasa from './TelaConfigurarCasa';
 import TelaEntrarCasa from './TelaEntrarCasa';
 import TelaEmergencia from './TelaEmergencia';
 
+const API_URL = 'http://192.168.12.95:3000';
+
 export default function App() {
   const [telaAtual, setTelaAtual] = useState('Principal');
   
-  // O usuário padrão falso que será substituído no momento do Login
-  const [usuarioAtual, setUsuarioAtual] = useState({ id: 'user123', nome: 'Criador', imagem: 'https://cdn-icons-png.flaticon.com/512/149/149071.png' });
+  // Começa sem usuário falso para não misturar dados entre contas
+  const [usuarioAtual, setUsuarioAtual] = useState(null);
 
   // 👉 NOSSAS CONFIGURAÇÕES GLOBAIS
   const [notificacoesAtivas, setNotificacoesAtivas] = useState(true);
   const [modoNoturno, setModoNoturno] = useState(false);
 
-  // Array inicial de casas (O banco de dados vai substituir isso assim que a tela de Casas abrir)
-  const [casas, setCasas] = useState([
-    { id: '1', nome: 'Minha casa', imagem: 'https://images.unsplash.com/photo-1518780664697-55e3ad937233?q=80&w=250&auto=format&fit=crop', adminId: 'user123' },
-    { id: '2', nome: 'Casa do Vizinho', imagem: 'https://images.unsplash.com/photo-1518780664697-55e3ad937233?q=80&w=250&auto=format&fit=crop', adminId: 'user999' }
-  ]);
+  // Começa tudo vazio. Assim uma conta nova não herda casa/pet de outra conta.
+  const [casas, setCasas] = useState([]);
   const [casaAtual, setCasaAtual] = useState(null);
-
-  const [pets, setPets] = useState([
-    { id: '1', nome: 'Bolinha', imagem: 'https://images.unsplash.com/photo-1552053831-71594a27632d?q=80&w=250&auto=format&fit=crop', casaId: '1' }
-  ]);
-
-  const [membros, setMembros] = useState([
-    { id: 'user123', nome: 'Criador (Você)', imagem: 'https://cdn-icons-png.flaticon.com/512/149/149071.png', casaId: '1' }
-  ]);
+  const [pets, setPets] = useState([]);
+  const [membros, setMembros] = useState([]);
   const [petAtual, setPetAtual] = useState(null);
-
-  const [metas, setMetas] = useState([
-    { petId: '1', comidaMeta: 3, comidaFeita: 0, comidaPeriodo: 'Diário', passeioMeta: 2, passeioFeita: 0, passeioPeriodo: 'Diário', curativoMeta: 0, curativoFeita: 0, curativoPeriodo: 'Mensal', vetMeta: 1, vetFeita: 0, vetPeriodo: 'Semestral' }
-  ]);
+  const [metas, setMetas] = useState([]);
   const [agendamentos, setAgendamentos] = useState([]);
 
+  const normalizarCasa = (casa) => ({
+    ...casa,
+    adminId: casa.adminId ?? casa.admin_id,
+    admin_id: casa.admin_id ?? casa.adminId,
+    papel: casa.papel,
+  });
+
+  const limparDadosLocais = () => {
+    setCasas([]);
+    setCasaAtual(null);
+    setPets([]);
+    setMembros([]);
+    setPetAtual(null);
+    setMetas([]);
+    setAgendamentos([]);
+  };
+
+  const finalizarLogin = async (usuario) => {
+    const usuarioReal = Array.isArray(usuario) ? usuario[0] : usuario;
+
+    if (!usuarioReal?.id) {
+      alert('Não foi possível identificar o usuário logado. Tente entrar novamente.');
+      return;
+    }
+
+    setUsuarioAtual(usuarioReal);
+    limparDadosLocais();
+
+    try {
+      const resposta = await fetch(`${API_URL}/casas/${usuarioReal.id}`);
+      const dados = await resposta.json();
+
+      if (dados.sucesso) {
+        const casasDoUsuario = (dados.casas || []).map(normalizarCasa);
+        setCasas(casasDoUsuario);
+      }
+    } catch (error) {
+      console.error('Erro ao buscar casas do usuário:', error);
+    }
+
+    setTelaAtual('Casas');
+  };
+
   // 👉 ROTEAMENTO COM MODO NOTURNO INJETADO EM TODAS AS TELAS
-  if (telaAtual === 'Login') return <TelaDeLogin setTelaAtual={setTelaAtual} setUsuarioAtual={setUsuarioAtual} modoNoturno={modoNoturno} />;
+  if (telaAtual === 'Login') return <TelaDeLogin setTelaAtual={setTelaAtual} setUsuarioAtual={setUsuarioAtual} onLogin={finalizarLogin} modoNoturno={modoNoturno} />;
   if (telaAtual === 'Cadastro') return <TelaDeCadastro setTelaAtual={setTelaAtual} modoNoturno={modoNoturno} />;
   
   // 🔥 A MÁGICA FOI FEITA AQUI: Adicionamos o setCasas={setCasas} para a tela poder atualizar os dados!
-  if (telaAtual === 'Casas') return <ListaDeCasas setTelaAtual={setTelaAtual} casas={casas} setCasas={setCasas} setCasaAtual={setCasaAtual} usuarioAtual={usuarioAtual} membros={membros} modoNoturno={modoNoturno} />;
+  if (telaAtual === 'Casas') return <ListaDeCasas setTelaAtual={setTelaAtual} casas={casas} setCasas={setCasas} setCasaAtual={setCasaAtual} usuarioAtual={usuarioAtual} membros={membros} setMembros={setMembros} modoNoturno={modoNoturno} />;
   
   if (telaAtual === 'NovaCasa') return <TelaNovaCasa setTelaAtual={setTelaAtual} casas={casas} setCasas={setCasas} usuarioAtual={usuarioAtual} modoNoturno={modoNoturno} />;
   if (telaAtual === 'ExcluirCasa') return <TelaExcluirCasa setTelaAtual={setTelaAtual} casas={casas} setCasas={setCasas} pets={pets} setPets={setPets} casaAtual={casaAtual} setCasaAtual={setCasaAtual} usuarioAtual={usuarioAtual} modoNoturno={modoNoturno} />;
-  if (telaAtual === 'EntrarCasa') return <TelaEntrarCasa setTelaAtual={setTelaAtual} casas={casas} membros={membros} setMembros={setMembros} usuarioAtual={usuarioAtual} modoNoturno={modoNoturno} />;
+  if (telaAtual === 'EntrarCasa') return <TelaEntrarCasa setTelaAtual={setTelaAtual} casas={casas} setCasas={setCasas} casaAtual={casaAtual} setCasaAtual={setCasaAtual} membros={membros} setMembros={setMembros} usuarioAtual={usuarioAtual} modoNoturno={modoNoturno} />;
   
   if (telaAtual === 'ListaDePets') return <ListaDePets setTelaAtual={setTelaAtual} pets={pets} casaAtual={casaAtual} setPetAtual={setPetAtual} usuarioAtual={usuarioAtual} modoNoturno={modoNoturno} />;
   if (telaAtual === 'NovoPet') return <TelaNovoPet setTelaAtual={setTelaAtual} pets={pets} setPets={setPets} casaAtual={casaAtual} modoNoturno={modoNoturno} />;
-  if (telaAtual === 'Agendar') return <TelaAgendar setTelaAtual={setTelaAtual} petAtual={petAtual} agendamentos={agendamentos} setAgendamentos={setAgendamentos} modoNoturno={modoNoturno} />;
-  if (telaAtual === 'MetasCuidados') return <TelaMetasCuidados setTelaAtual={setTelaAtual} petAtual={petAtual} setPetAtual={setPetAtual} pets={pets} setPets={setPets} casaAtual={casaAtual} usuarioAtual={usuarioAtual} metas={metas} setMetas={setMetas} agendamentos={agendamentos} modoNoturno={modoNoturno} />;
+  if (telaAtual === 'Agendar') return <TelaAgendar setTelaAtual={setTelaAtual} petAtual={petAtual} agendamentos={agendamentos} setAgendamentos={setAgendamentos} notificacoesAtivas={notificacoesAtivas} modoNoturno={modoNoturno} />;
+  if (telaAtual === 'MetasCuidados') return <TelaMetasCuidados setTelaAtual={setTelaAtual} petAtual={petAtual} setPetAtual={setPetAtual} pets={pets} setPets={setPets} casaAtual={casaAtual} usuarioAtual={usuarioAtual} metas={metas} setMetas={setMetas} agendamentos={agendamentos} notificacoesAtivas={notificacoesAtivas} modoNoturno={modoNoturno} />;
   if (telaAtual === 'ConfigurarCasa') return <TelaConfigurarCasa setTelaAtual={setTelaAtual} casaAtual={casaAtual} setCasaAtual={setCasaAtual} casas={casas} setCasas={setCasas} usuarioAtual={usuarioAtual} pets={pets} membros={membros} setMembros={setMembros} modoNoturno={modoNoturno} />;
   if (telaAtual === 'Emergencia') return <TelaEmergencia setTelaAtual={setTelaAtual} petAtual={petAtual} modoNoturno={modoNoturno} />;
 

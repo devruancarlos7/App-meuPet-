@@ -13,8 +13,8 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 // 👉 RECEBENDO O MODO NOTURNO
 export default function TelaConfigurarCasa({ setTelaAtual, casaAtual, setCasaAtual, casas, setCasas, usuarioAtual, pets, membros, setMembros, modoNoturno }) {
 
-  const petsDestaCasa = pets.filter(p => p.casaId === casaAtual?.id); 
-  const membrosDestaCasa = membros.filter(m => m.casaId === casaAtual?.id);
+  const petsDestaCasa = pets.filter(p => String(p.casaId ?? p.casa_id) === String(casaAtual?.id)); 
+  const membrosDestaCasa = membros.filter(m => String(m.casaId ?? m.casa_id) === String(casaAtual?.id));
 
   const navegarComAnimacao = (tela) => { 
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); 
@@ -112,7 +112,7 @@ export default function TelaConfigurarCasa({ setTelaAtual, casaAtual, setCasaAtu
               <Text style={[styles.tituloSecao, { color: corTextoPrincipal }]}>Membros 👥</Text> 
               
               {membrosDestaCasa.map((membro, index) => {
-                const isLider = membro.id === casaAtual?.adminId;
+                const isLider = String(membro.id) === String(casaAtual?.adminId ?? casaAtual?.admin_id);
                 const backgroundColor = isLider ? corMembroLider : corMembroComum;
                 const borderColor = isLider ? corMembroLiderBorda : corMembroComumBorda;
 
@@ -129,7 +129,7 @@ export default function TelaConfigurarCasa({ setTelaAtual, casaAtual, setCasaAtu
                     </View>
 
                     {/* Botão Expulsar (Apenas Admin vê e não pode se expulsar) */}
-                    {casaAtual?.adminId === usuarioAtual?.id && !isLider && (
+                    {String(casaAtual?.adminId ?? casaAtual?.admin_id) === String(usuarioAtual?.id) && !isLider && (
                       <TouchableOpacity style={styles.botaoExpulsar} onPress={() => handleExpulsarMembro(membro)}>
                         <Feather name="user-x" size={18} color="#FFF" />
                       </TouchableOpacity>
