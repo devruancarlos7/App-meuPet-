@@ -1,8 +1,18 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  SafeAreaView,
+  Platform,
+  AppState
+} from 'react-native';
+
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { FontAwesome5, Feather } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Importação de todas as suas telas
 import TelaDeLogin from './TelaDeLogin';
@@ -20,32 +30,59 @@ import TelaConfigurarCasa from './TelaConfigurarCasa';
 import TelaEntrarCasa from './TelaEntrarCasa';
 import TelaEmergencia from './TelaEmergencia';
 
-const API_URL = 'http://192.168.12.95:3000';
+const API_URL = Platform.OS === 'web'
+  ? 'http://localhost:3000'
+  : 'http://192.168.1.245:3000';
 
 export default function App() {
   const [telaAtual, setTelaAtual] = useState('Principal');
-  
-  // Começa sem usuário falso para não misturar dados entre contas
-  const [usuarioAtual, setUsuarioAtual] = useState(null);
 
-  // 👉 NOSSAS CONFIGURAÇÕES GLOBAIS
+  const [usuarioAtual, setUsuarioAtual] = useState(null);
+  const [carregandoInicial, setCarregandoInicial] = useState(true);
+
   const [notificacoesAtivas, setNotificacoesAtivas] = useState(true);
   const [modoNoturno, setModoNoturno] = useState(false);
 
-  // Começa tudo vazio. Assim uma conta nova não herda casa/pet de outra conta.
   const [casas, setCasas] = useState([]);
   const [casaAtual, setCasaAtual] = useState(null);
+
   const [pets, setPets] = useState([]);
   const [membros, setMembros] = useState([]);
+
   const [petAtual, setPetAtual] = useState(null);
   const [metas, setMetas] = useState([]);
   const [agendamentos, setAgendamentos] = useState([]);
+
+  const normalizarUsuario = (dados) => {
+    if (!dados) return null;
+
+    if (dados.usuario) return dados.usuario;
+
+    if (Array.isArray(dados)) {
+      if (Array.isArray(dados[0])) return dados[0][0] || null;
+      return dados[0] || null;
+    }
+
+    return dados;
+  };
 
   const normalizarCasa = (casa) => ({
     ...casa,
     adminId: casa.adminId ?? casa.admin_id,
     admin_id: casa.admin_id ?? casa.adminId,
-    papel: casa.papel,
+    papel: casa.papel ?? casa.tipo
+  });
+
+  const normalizarPet = (pet) => ({
+    ...pet,
+    casaId: pet.casaId ?? pet.casa_id,
+    casa_id: pet.casa_id ?? pet.casaId
+  });
+
+  const normalizarMembro = (membro) => ({
+    ...membro,
+    casaId: membro.casaId ?? membro.casa_id,
+    casa_id: membro.casa_id ?? membro.casaId
   });
 
   const limparDadosLocais = () => {
@@ -58,51 +95,463 @@ export default function App() {
     setAgendamentos([]);
   };
 
-  const finalizarLogin = async (usuario) => {
-    const usuarioReal = Array.isArray(usuario) ? usuario[0] : usuario;
+  const buscarCasasDoUsuario = useCallback(async (usuarioId) => {
+    if (!usuarioId) return [];
+
+    try {
+      const resposta = await fetch(`${API_URL}/casas/${usuarioId}`);
+
+      if (!resposta.ok) {
+        console.log('Erro ao buscar casas:', resposta.status);
+        return [];
+      }
+
+      const dados = await resposta.json();
+
+      const casasFormatadas = Array.isArray(dados)
+        ? dados.map(normalizarCasa)
+        : [];
+
+      console.log(
+  'CASAS VINDAS DO BANCO:',
+  casasFormatadas.map(casa => ({
+    id: casa.id,
+    nome: casa.nome,
+    adminId: casa.adminId,
+    temImagem: !!casa.imagem,
+    tamanhoImagem: casa.imagem ? casa.imagem.length : 0
+  }))
+);
+
+      setCasas(casasFormatadas);
+
+      setCasaAtual(casaAnterior => {
+        if (!casaAnterior?.id) return casaAnterior;
+
+        const casaAtualizada = casasFormatadas.find(
+          c => String(c.id) === String(casaAnterior.id)
+        );
+
+        return casaAtualizada || null;
+      });
+
+      return casasFormatadas;
+    } catch (erro) {
+      console.error('Erro ao buscar casas do banco:', erro);
+      return [];
+    }
+  }, []);
+
+  const buscarPetsDaCasa = useCallback(async (casaId) => {
+    if (!casaId) return [];
+
+    try {
+      const resposta = await fetch(`${API_URL}/casas/${casaId}/pets`);
+
+      if (!resposta.ok) {
+        console.log('Erro ao buscar pets:', resposta.status);
+        return [];
+      }
+
+      const dados = await resposta.json();
+
+      const petsFormatados = Array.isArray(dados)
+        ? dados.map(normalizarPet)
+        : [];
+
+      console.log(
+  'PETS VINDOS DO BANCO:',
+  petsFormatados.map(pet => ({
+    id: pet.id,
+    nome: pet.nome,
+    casaId: pet.casaId,
+    temImagem: !!pet.imagem,
+    tamanhoImagem: pet.imagem ? pet.imagem.length : 0
+  }))
+);
+
+      setPets(petsFormatados);
+
+      setPetAtual(petAnterior => {
+        if (!petAnterior?.id) return petAnterior;
+
+        const petAtualizado = petsFormatados.find(
+          p => String(p.id) === String(petAnterior.id)
+        );
+
+        return petAtualizado || null;
+      });
+
+      return petsFormatados;
+    } catch (erro) {
+      console.error('Erro ao buscar pets do banco:', erro);
+      return [];
+    }
+  }, []);
+
+  const buscarMembrosDaCasa = useCallback(async (casaId) => {
+    if (!casaId) return [];
+
+    try {
+      const resposta = await fetch(`${API_URL}/casas/${casaId}/membros`);
+
+      if (!resposta.ok) {
+        console.log('Erro ao buscar membros:', resposta.status);
+        return [];
+      }
+
+      const dados = await resposta.json();
+
+      const membrosFormatados = Array.isArray(dados)
+        ? dados.map(normalizarMembro)
+        : [];
+
+      console.log(
+  'MEMBROS VINDOS DO BANCO:',
+  membrosFormatados.map(membro => ({
+    id: membro.id,
+    nome: membro.nome,
+    tipo: membro.tipo,
+    casaId: membro.casaId,
+    temImagem: !!membro.imagem
+  }))
+);
+
+      setMembros(membrosFormatados);
+
+      return membrosFormatados;
+    } catch (erro) {
+      console.error('Erro ao buscar membros do banco:', erro);
+      return [];
+    }
+  }, []);
+
+  const buscarTudoDoUsuario = useCallback(async (usuarioId) => {
+    if (!usuarioId) return;
+
+    const casasDoBanco = await buscarCasasDoUsuario(usuarioId);
+
+    if (casaAtual?.id) {
+      await buscarPetsDaCasa(casaAtual.id);
+      await buscarMembrosDaCasa(casaAtual.id);
+    } else if (casasDoBanco.length > 0) {
+      const primeiraCasa = casasDoBanco[0];
+
+      await buscarPetsDaCasa(primeiraCasa.id);
+      await buscarMembrosDaCasa(primeiraCasa.id);
+    }
+  }, [buscarCasasDoUsuario, buscarPetsDaCasa, buscarMembrosDaCasa, casaAtual?.id]);
+
+  useEffect(() => {
+    const carregarUsuarioSalvo = async () => {
+      try {
+        const usuarioSalvo = await AsyncStorage.getItem('@usuario_logado_meupets');
+
+        if (usuarioSalvo) {
+          const usuario = JSON.parse(usuarioSalvo);
+
+          if (usuario?.id) {
+            setUsuarioAtual(usuario);
+            setTelaAtual('Casas');
+            await buscarCasasDoUsuario(usuario.id);
+          }
+        }
+      } catch (erro) {
+        console.error('Erro ao carregar usuário salvo:', erro);
+      } finally {
+        setCarregandoInicial(false);
+      }
+    };
+
+    carregarUsuarioSalvo();
+  }, [buscarCasasDoUsuario]);
+
+  useEffect(() => {
+    if (usuarioAtual?.id && telaAtual === 'Casas') {
+      buscarCasasDoUsuario(usuarioAtual.id);
+    }
+  }, [usuarioAtual?.id, telaAtual, buscarCasasDoUsuario]);
+
+  useEffect(() => {
+    if (casaAtual?.id) {
+      buscarPetsDaCasa(casaAtual.id);
+      buscarMembrosDaCasa(casaAtual.id);
+    }
+  }, [casaAtual?.id, buscarPetsDaCasa, buscarMembrosDaCasa]);
+
+  useEffect(() => {
+    const assinatura = AppState.addEventListener('change', async (estado) => {
+      if (estado === 'active' && usuarioAtual?.id) {
+        await buscarCasasDoUsuario(usuarioAtual.id);
+
+        if (casaAtual?.id) {
+          await buscarPetsDaCasa(casaAtual.id);
+          await buscarMembrosDaCasa(casaAtual.id);
+        }
+      }
+    });
+
+    return () => {
+      assinatura.remove();
+    };
+  }, [
+    usuarioAtual?.id,
+    casaAtual?.id,
+    buscarCasasDoUsuario,
+    buscarPetsDaCasa,
+    buscarMembrosDaCasa
+  ]);
+
+  const finalizarLogin = async (usuarioRecebido) => {
+    const usuarioReal = normalizarUsuario(usuarioRecebido);
 
     if (!usuarioReal?.id) {
-      alert('Não foi possível identificar o usuário logado. Tente entrar novamente.');
+      console.log('Usuário inválido recebido no login:', usuarioRecebido);
       return;
     }
 
     setUsuarioAtual(usuarioReal);
-    limparDadosLocais();
 
     try {
-      const resposta = await fetch(`${API_URL}/casas/${usuarioReal.id}`);
-      const dados = await resposta.json();
-
-      if (dados.sucesso) {
-        const casasDoUsuario = (dados.casas || []).map(normalizarCasa);
-        setCasas(casasDoUsuario);
-      }
-    } catch (error) {
-      console.error('Erro ao buscar casas do usuário:', error);
+      await AsyncStorage.setItem(
+        '@usuario_logado_meupets',
+        JSON.stringify(usuarioReal)
+      );
+    } catch (erro) {
+      console.error('Erro ao salvar usuário logado:', erro);
     }
+
+    limparDadosLocais();
+
+    await buscarCasasDoUsuario(usuarioReal.id);
 
     setTelaAtual('Casas');
   };
 
-  // 👉 ROTEAMENTO COM MODO NOTURNO INJETADO EM TODAS AS TELAS
-  if (telaAtual === 'Login') return <TelaDeLogin setTelaAtual={setTelaAtual} setUsuarioAtual={setUsuarioAtual} onLogin={finalizarLogin} modoNoturno={modoNoturno} />;
-  if (telaAtual === 'Cadastro') return <TelaDeCadastro setTelaAtual={setTelaAtual} modoNoturno={modoNoturno} />;
-  
-  // 🔥 A MÁGICA FOI FEITA AQUI: Adicionamos o setCasas={setCasas} para a tela poder atualizar os dados!
-  if (telaAtual === 'Casas') return <ListaDeCasas setTelaAtual={setTelaAtual} casas={casas} setCasas={setCasas} setCasaAtual={setCasaAtual} usuarioAtual={usuarioAtual} membros={membros} setMembros={setMembros} modoNoturno={modoNoturno} />;
-  
-  if (telaAtual === 'NovaCasa') return <TelaNovaCasa setTelaAtual={setTelaAtual} casas={casas} setCasas={setCasas} usuarioAtual={usuarioAtual} modoNoturno={modoNoturno} />;
-  if (telaAtual === 'ExcluirCasa') return <TelaExcluirCasa setTelaAtual={setTelaAtual} casas={casas} setCasas={setCasas} pets={pets} setPets={setPets} casaAtual={casaAtual} setCasaAtual={setCasaAtual} usuarioAtual={usuarioAtual} modoNoturno={modoNoturno} />;
-  if (telaAtual === 'EntrarCasa') return <TelaEntrarCasa setTelaAtual={setTelaAtual} casas={casas} setCasas={setCasas} casaAtual={casaAtual} setCasaAtual={setCasaAtual} membros={membros} setMembros={setMembros} usuarioAtual={usuarioAtual} modoNoturno={modoNoturno} />;
-  
-  if (telaAtual === 'ListaDePets') return <ListaDePets setTelaAtual={setTelaAtual} pets={pets} casaAtual={casaAtual} setPetAtual={setPetAtual} usuarioAtual={usuarioAtual} modoNoturno={modoNoturno} />;
-  if (telaAtual === 'NovoPet') return <TelaNovoPet setTelaAtual={setTelaAtual} pets={pets} setPets={setPets} casaAtual={casaAtual} modoNoturno={modoNoturno} />;
-  if (telaAtual === 'Agendar') return <TelaAgendar setTelaAtual={setTelaAtual} petAtual={petAtual} agendamentos={agendamentos} setAgendamentos={setAgendamentos} notificacoesAtivas={notificacoesAtivas} modoNoturno={modoNoturno} />;
-  if (telaAtual === 'MetasCuidados') return <TelaMetasCuidados setTelaAtual={setTelaAtual} petAtual={petAtual} setPetAtual={setPetAtual} pets={pets} setPets={setPets} casaAtual={casaAtual} usuarioAtual={usuarioAtual} metas={metas} setMetas={setMetas} agendamentos={agendamentos} notificacoesAtivas={notificacoesAtivas} modoNoturno={modoNoturno} />;
-  if (telaAtual === 'ConfigurarCasa') return <TelaConfigurarCasa setTelaAtual={setTelaAtual} casaAtual={casaAtual} setCasaAtual={setCasaAtual} casas={casas} setCasas={setCasas} usuarioAtual={usuarioAtual} pets={pets} membros={membros} setMembros={setMembros} modoNoturno={modoNoturno} />;
-  if (telaAtual === 'Emergencia') return <TelaEmergencia setTelaAtual={setTelaAtual} petAtual={petAtual} modoNoturno={modoNoturno} />;
+  const sairDaConta = async () => {
+    try {
+      await AsyncStorage.removeItem('@usuario_logado_meupets');
+    } catch (erro) {
+      console.error('Erro ao remover usuário salvo:', erro);
+    }
 
-  // Tela de Perfil
+    setUsuarioAtual(null);
+    limparDadosLocais();
+    setTelaAtual('Principal');
+  };
+
+  const selecionarCasa = async (casa) => {
+    const casaFormatada = normalizarCasa(casa);
+
+    setCasaAtual(casaFormatada);
+
+    await buscarPetsDaCasa(casaFormatada.id);
+    await buscarMembrosDaCasa(casaFormatada.id);
+
+    setTelaAtual('ListaDePets');
+  };
+
+  const selecionarPet = (pet) => {
+    const petFormatado = normalizarPet(pet);
+
+    setPetAtual(petFormatado);
+    setTelaAtual('MetasCuidados');
+  };
+
+  if (carregandoInicial) {
+    return (
+      <LinearGradient colors={['#F86F03', '#4F7FFF']} style={styles.container}>
+        <StatusBar style="light" />
+
+        <SafeAreaView style={styles.areaCarregando}>
+          <FontAwesome5 name="paw" size={70} color="#FFF" />
+          <Text style={styles.textoCarregando}>Carregando MeuPets...</Text>
+        </SafeAreaView>
+      </LinearGradient>
+    );
+  }
+
+  if (telaAtual === 'Login') {
+    return (
+      <TelaDeLogin
+        setTelaAtual={setTelaAtual}
+        setUsuarioAtual={setUsuarioAtual}
+        onLogin={finalizarLogin}
+        modoNoturno={modoNoturno}
+      />
+    );
+  }
+
+  if (telaAtual === 'Cadastro') {
+    return (
+      <TelaDeCadastro
+        setTelaAtual={setTelaAtual}
+        modoNoturno={modoNoturno}
+      />
+    );
+  }
+
+  if (telaAtual === 'Casas') {
+    return (
+      <ListaDeCasas
+        setTelaAtual={setTelaAtual}
+        casas={casas}
+        setCasas={setCasas}
+        casaAtual={casaAtual}
+        setCasaAtual={setCasaAtual}
+        usuarioAtual={usuarioAtual}
+        membros={membros}
+        setMembros={setMembros}
+        modoNoturno={modoNoturno}
+        buscarCasasDoUsuario={buscarCasasDoUsuario}
+        buscarPetsDaCasa={buscarPetsDaCasa}
+        buscarMembrosDaCasa={buscarMembrosDaCasa}
+        selecionarCasa={selecionarCasa}
+      />
+    );
+  }
+
+  if (telaAtual === 'NovaCasa') {
+    return (
+      <TelaNovaCasa
+        setTelaAtual={setTelaAtual}
+        casas={casas}
+        setCasas={setCasas}
+        usuarioAtual={usuarioAtual}
+        modoNoturno={modoNoturno}
+        buscarCasasDoUsuario={buscarCasasDoUsuario}
+      />
+    );
+  }
+
+  if (telaAtual === 'ExcluirCasa') {
+    return (
+      <TelaExcluirCasa
+        setTelaAtual={setTelaAtual}
+        casas={casas}
+        setCasas={setCasas}
+        pets={pets}
+        setPets={setPets}
+        casaAtual={casaAtual}
+        setCasaAtual={setCasaAtual}
+        usuarioAtual={usuarioAtual}
+        modoNoturno={modoNoturno}
+        buscarCasasDoUsuario={buscarCasasDoUsuario}
+      />
+    );
+  }
+
+  if (telaAtual === 'EntrarCasa') {
+    return (
+      <TelaEntrarCasa
+        setTelaAtual={setTelaAtual}
+        casas={casas}
+        setCasas={setCasas}
+        casaAtual={casaAtual}
+        setCasaAtual={setCasaAtual}
+        membros={membros}
+        setMembros={setMembros}
+        usuarioAtual={usuarioAtual}
+        modoNoturno={modoNoturno}
+        buscarCasasDoUsuario={buscarCasasDoUsuario}
+      />
+    );
+  }
+
+  if (telaAtual === 'ListaDePets') {
+    return (
+      <ListaDePets
+        setTelaAtual={setTelaAtual}
+        pets={pets}
+        setPets={setPets}
+        casaAtual={casaAtual}
+        setPetAtual={setPetAtual}
+        usuarioAtual={usuarioAtual}
+        modoNoturno={modoNoturno}
+        buscarPetsDaCasa={buscarPetsDaCasa}
+        selecionarPet={selecionarPet}
+      />
+    );
+  }
+
+  if (telaAtual === 'NovoPet') {
+    return (
+      <TelaNovoPet
+        setTelaAtual={setTelaAtual}
+        pets={pets}
+        setPets={setPets}
+        casaAtual={casaAtual}
+        modoNoturno={modoNoturno}
+        buscarPetsDaCasa={buscarPetsDaCasa}
+      />
+    );
+  }
+
+  if (telaAtual === 'Agendar') {
+    return (
+      <TelaAgendar
+        setTelaAtual={setTelaAtual}
+        petAtual={petAtual}
+        agendamentos={agendamentos}
+        setAgendamentos={setAgendamentos}
+        notificacoesAtivas={notificacoesAtivas}
+        modoNoturno={modoNoturno}
+      />
+    );
+  }
+
+  if (telaAtual === 'MetasCuidados') {
+    return (
+      <TelaMetasCuidados
+        setTelaAtual={setTelaAtual}
+        petAtual={petAtual}
+        setPetAtual={setPetAtual}
+        pets={pets}
+        setPets={setPets}
+        casaAtual={casaAtual}
+        usuarioAtual={usuarioAtual}
+        metas={metas}
+        setMetas={setMetas}
+        agendamentos={agendamentos}
+        setAgendamentos={setAgendamentos}
+        notificacoesAtivas={notificacoesAtivas}
+        modoNoturno={modoNoturno}
+        buscarPetsDaCasa={buscarPetsDaCasa}
+      />
+    );
+  }
+
+  if (telaAtual === 'ConfigurarCasa') {
+    return (
+      <TelaConfigurarCasa
+        setTelaAtual={setTelaAtual}
+        casaAtual={casaAtual}
+        setCasaAtual={setCasaAtual}
+        casas={casas}
+        setCasas={setCasas}
+        usuarioAtual={usuarioAtual}
+        pets={pets}
+        setPets={setPets}
+        membros={membros}
+        setMembros={setMembros}
+        modoNoturno={modoNoturno}
+        buscarCasasDoUsuario={buscarCasasDoUsuario}
+        buscarPetsDaCasa={buscarPetsDaCasa}
+        buscarMembrosDaCasa={buscarMembrosDaCasa}
+      />
+    );
+  }
+
+  if (telaAtual === 'Emergencia') {
+    return (
+      <TelaEmergencia
+        setTelaAtual={setTelaAtual}
+        petAtual={petAtual}
+        modoNoturno={modoNoturno}
+      />
+    );
+  }
+
   if (telaAtual === 'PerfilUsuario') {
     return (
       <TelaPerfilUsuario
@@ -110,15 +559,16 @@ export default function App() {
         usuarioAtual={usuarioAtual}
         setUsuarioAtual={setUsuarioAtual}
         pets={pets}
+        casas={casas}
         notificacoesAtivas={notificacoesAtivas}
         setNotificacoesAtivas={setNotificacoesAtivas}
         modoNoturno={modoNoturno}
         setModoNoturno={setModoNoturno}
+        sairDaConta={sairDaConta}
       />
     );
   }
 
-  // 👉 A TELA INICIAL (PRINCIPAL) COM CORES DINÂMICAS PARA TRANSIÇÃO SUAVE
   const coresFundo = modoNoturno ? ['#121212', '#2C3E50'] : ['#F86F03', '#4F7FFF'];
   const corCartao = modoNoturno ? '#1E1E1E' : '#FFF';
   const corTextoPrincipal = modoNoturno ? '#FFF' : '#333';
@@ -127,49 +577,179 @@ export default function App() {
 
   return (
     <LinearGradient colors={coresFundo} style={styles.container}>
-      <StatusBar style={modoNoturno ? "light" : "auto"} />
+      <StatusBar style={modoNoturno ? 'light' : 'auto'} />
+
       <SafeAreaView style={{ flex: 1, justifyContent: 'space-between' }}>
-        
         <View style={styles.areaLogo}>
-          <FontAwesome5 name="paw" size={80} color="#FFF" style={{ marginBottom: 20 }} />
+          <FontAwesome5
+            name="paw"
+            size={80}
+            color="#FFF"
+            style={{ marginBottom: 20 }}
+          />
+
           <Text style={styles.tituloApp}>MeuPets</Text>
-          <Text style={styles.subtituloApp}>Organize a rotina do seu melhor amigo</Text>
+
+          <Text style={styles.subtituloApp}>
+            O melhor amigo do seu pet
+          </Text>
         </View>
 
         <View style={[styles.cardBranco, { backgroundColor: corCartao }]}>
-          <Text style={[styles.tituloBoasVindas, { color: corTextoPrincipal }]}>Bem-vindo!</Text>
-          <Text style={[styles.textoBoasVindas, { color: corTextoSecundario }]}>
-            Acesse sua conta ou crie uma nova para começar a gerenciar seus pets.
+          <Text style={[styles.tituloBoasVindas, { color: corTextoPrincipal }]}>
+            Bem-vindo!
           </Text>
 
-          <TouchableOpacity style={styles.botaoLogin} onPress={() => setTelaAtual('Login')}>
-            <Text style={styles.textoBotaoLogin}>Fazer Login</Text>
+          <Text style={[styles.textoBoasVindas, { color: corTextoSecundario }]}>
+            Escolha uma opção para começar
+          </Text>
+
+          <TouchableOpacity
+            style={styles.botaoLogin}
+            onPress={() => setTelaAtual('Login')}
+          >
+            <Text style={styles.textoBotaoLogin}>Entrar</Text>
             <Feather name="arrow-right" size={20} color="#FFF" />
           </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.botaoCadastrar, { borderColor: corBotaoBorda }]} onPress={() => setTelaAtual('Cadastro')}>
-            <Text style={[styles.textoBotaoCadastrar, { color: modoNoturno ? '#FFF' : '#F86F03' }]}>Criar Conta</Text>
+          <TouchableOpacity
+            style={[
+              styles.botaoCadastrar,
+              {
+                borderColor: corBotaoBorda
+              }
+            ]}
+            onPress={() => setTelaAtual('Cadastro')}
+          >
+            <Text style={[styles.textoBotaoCadastrar, { color: corTextoPrincipal }]}>
+              Criar uma Conta
+            </Text>
           </TouchableOpacity>
 
-          <Text style={styles.versao}>v0.0.1</Text>
+          <Text style={styles.versao}>v1.0.0</Text>
         </View>
-
       </SafeAreaView>
     </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  areaLogo: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 30 },
-  tituloApp: { fontSize: 48, fontWeight: '900', color: '#FFF', textShadowColor: 'rgba(0,0,0,0.2)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 5 },
-  subtituloApp: { fontSize: 16, color: 'rgba(255,255,255,0.9)', textAlign: 'center', marginTop: 5 },
-  cardBranco: { borderTopLeftRadius: 40, borderTopRightRadius: 40, paddingHorizontal: 30, paddingTop: 40, paddingBottom: 30, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: -3 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 10 },
-  tituloBoasVindas: { fontSize: 28, fontWeight: 'bold', marginBottom: 10 },
-  textoBoasVindas: { fontSize: 16, textAlign: 'center', marginBottom: 30 },
-  botaoLogin: { flexDirection: 'row', backgroundColor: '#F86F03', width: '100%', height: 60, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginBottom: 15, shadowColor: '#F86F03', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5 },
-  textoBotaoLogin: { color: '#FFF', fontSize: 18, fontWeight: 'bold', marginRight: 10 },
-  botaoCadastrar: { width: '100%', height: 60, borderWidth: 2, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
-  textoBotaoCadastrar: { fontSize: 18, fontWeight: 'bold' },
-  versao: { color: '#AAA', fontSize: 12, fontWeight: 'bold', marginTop: 25 }
+  container: {
+    flex: 1
+  },
+
+  areaCarregando: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+
+  textoCarregando: {
+    color: '#FFF',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginTop: 20
+  },
+
+  areaLogo: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 30
+  },
+
+  tituloApp: {
+    fontSize: 48,
+    fontWeight: '900',
+    color: '#FFF',
+    textShadowColor: 'rgba(0,0,0,0.2)',
+    textShadowOffset: {
+      width: 1,
+      height: 1
+    },
+    textShadowRadius: 5
+  },
+
+  subtituloApp: {
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.9)',
+    textAlign: 'center',
+    marginTop: 5
+  },
+
+  cardBranco: {
+    borderTopLeftRadius: 40,
+    borderTopRightRadius: 40,
+    paddingHorizontal: 30,
+    paddingTop: 40,
+    paddingBottom: 30,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: -3
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 10
+  },
+
+  tituloBoasVindas: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    marginBottom: 10
+  },
+
+  textoBoasVindas: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 30
+  },
+
+  botaoLogin: {
+    flexDirection: 'row',
+    backgroundColor: '#F86F03',
+    width: '100%',
+    height: 60,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 15,
+    shadowColor: '#F86F03',
+    shadowOffset: {
+      width: 0,
+      height: 4
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5
+  },
+
+  textoBotaoLogin: {
+    color: '#FFF',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginRight: 10
+  },
+
+  botaoCadastrar: {
+    width: '100%',
+    height: 60,
+    borderWidth: 2,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+
+  textoBotaoCadastrar: {
+    fontSize: 18,
+    fontWeight: 'bold'
+  },
+
+  versao: {
+    color: '#AAA',
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginTop: 25
+  }
 });

@@ -6,15 +6,18 @@ const cors = require('cors');
 // 2. Inicializando o servidor
 const app = express();
 app.use(cors());
-app.use(express.json()); // Permite que o servidor entenda dados em JSON (como senhas e emails do celular)
 
-// 3. Configurando a conexão com o seu Banco de Dados (MeuPets)
+// IMPORTANTE: limite maior para salvar imagens em base64
+app.use(express.json({ limit: '25mb' }));
+app.use(express.urlencoded({ extended: true, limit: '25mb' }));
+
+// 3. Configurando a conexão com o seu Banco de Dados
 const db = mysql.createConnection({
     host: 'localhost',
-    port: 3306,          // A mesma porta que usamos lá na extensão SQLTools hoje!
+    port: 3306,
     user: 'root',
-    password: '',        // A famosa senha vazia do XAMPP
-    database: 'meupets'  // O nome da pasta do banco que criamos
+    password: '',
+    database: 'meupets'
 });
 
 // 4. Testando a conexão
@@ -24,113 +27,62 @@ db.connect((erro) => {
         return;
     }
 
-    console.log('Conectado com sucesso ao banco MeuPets! 🐾');
+    console.log('Conectado ao banco de dados com sucesso! 🐾');
 
-    // Cria a tabela de convidados/membros se ela ainda não existir.
-    // Mesmo assim, deixei um arquivo SQL separado para você rodar manualmente se preferir.
-    const sqlCriarTabelaMembros = `
-        CREATE TABLE IF NOT EXISTS casa_membros (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            casa_id INT NOT NULL,
-            usuario_id INT NOT NULL,
-            tipo VARCHAR(20) NOT NULL DEFAULT 'membro',
-            criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE KEY casa_usuario_unico (casa_id, usuario_id),
-            FOREIGN KEY (casa_id) REFERENCES casas(id) ON DELETE CASCADE,
-            FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
-        )
-    `;
-
-    db.query(sqlCriarTabelaMembros, (erroTabela) => {
-        if (erroTabela) {
-            console.error('Aviso: não foi possível criar/verificar a tabela casa_membros:', erroTabela);
-            return;
+    db.query('ALTER TABLE casas MODIFY imagem LONGTEXT NULL', (erroAlterCasa) => {
+        if (erroAlterCasa) {
+            console.error('Aviso ao ajustar imagem da tabela casas:', erroAlterCasa.message);
         }
+    });
 
-        // Garante que casas antigas também tenham o administrador salvo como membro.
-        const sqlVincularAdminsAntigos = `
-            INSERT IGNORE INTO casa_membros (casa_id, usuario_id, tipo)
-            SELECT id, admin_id, 'admin'
-            FROM casas
-            WHERE admin_id IS NOT NULL
-        `;
+    db.query('ALTER TABLE pets MODIFY imagem LONGTEXT NULL', (erroAlterPet) => {
+        if (erroAlterPet) {
+            console.error('Aviso ao ajustar imagem da tabela pets:', erroAlterPet.message);
+        }
+    });
 
-        db.query(sqlVincularAdminsAntigos, (erroVinculo) => {
-            if (erroVinculo) {
-                console.error('Aviso: não foi possível vincular admins antigos como membros:', erroVinculo);
-            }
-        });
+    db.query('ALTER TABLE usuarios MODIFY imagem LONGTEXT NULL', (erroAlterUsuario) => {
+        if (erroAlterUsuario) {
+            console.error('Aviso ao ajustar imagem da tabela usuarios:', erroAlterUsuario.message);
+        }
     });
 });
 
+// ---------------------------------------------------------
+// FUNÇÕES AUXILIARES
+// ---------------------------------------------------------
 const imagemPadraoCasa = 'https://images.unsplash.com/photo-1518780664697-55e3ad937233?q=80&w=250&auto=format&fit=crop';
 
 const limparNumeros = (valor = '') => String(valor).replace(/\D/g, '');
 
-const normalizarCasa = (casa, papelExtra) => ({
-    id: casa.id,
-    nome: casa.nome,
-    imagem: casa.imagem || imagemPadraoCasa,
-    adminId: casa.admin_id ?? casa.adminId,
-    admin_id: casa.admin_id ?? casa.adminId,
-    papel: papelExtra || casa.papel || undefined
+const limparAgendamentosExpiradosDoPet = (petId, callback) => {
+    const sql = `
+        DELETE FROM agendamentos
+        WHERE pet_id = ?
+        AND texto_data IS NOT NULL
+        AND texto_data <> ''
+        AND STR_TO_DATE(
+            CONCAT(texto_data, ' ', COALESCE(NULLIF(texto_horario, ''), '00:00')),
+            '%d/%m/%Y %H:%i'
+        ) IS NOT NULL
+        AND DATE_ADD(
+            STR_TO_DATE(
+                CONCAT(texto_data, ' ', COALESCE(NULLIF(texto_horario, ''), '00:00')),
+                '%d/%m/%Y %H:%i'
+            ),
+            INTERVAL 24 HOUR
+        ) < NOW()
+    `;
+
+    db.query(sql, [petId], callback);
+};
+
+// ---------------------------------------------------------
+// TESTE PARA SABER SE O INDEX CERTO ESTÁ RODANDO
+// ---------------------------------------------------------
+app.get('/teste-servidor', (req, res) => {
+    res.send('Index.js correto rodando!');
 });
-
-const normalizarMembro = (membro) => ({
-    id: membro.id,
-    nome: membro.nome,
-    imagem: membro.imagem || 'https://cdn-icons-png.flaticon.com/512/149/149071.png',
-    casaId: membro.casa_id ?? membro.casaId,
-    casa_id: membro.casa_id ?? membro.casaId,
-    tipo: membro.tipo || 'membro'
-});
-
-const validarEmail = (email) => {
-    const emailLimpo = String(email || '').trim().toLowerCase();
-    const regexEmail = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-    return regexEmail.test(emailLimpo);
-};
-
-const validarSenha = (senha) => {
-    const senhaTexto = String(senha || '');
-    const temMaisDeSeis = senhaTexto.length > 6;
-    const temLetra = /[A-Za-z]/.test(senhaTexto);
-    const temNumero = /\d/.test(senhaTexto);
-    return temMaisDeSeis && temLetra && temNumero;
-};
-
-const validarCPF = (cpf) => {
-    const numeros = limparNumeros(cpf);
-
-    if (numeros.length === 0) return true;
-    if (numeros.length !== 11) return false;
-    if (/^(\d)\1+$/.test(numeros)) return false;
-
-    let soma = 0;
-    for (let i = 0; i < 9; i++) {
-        soma += parseInt(numeros.charAt(i), 10) * (10 - i);
-    }
-
-    let resto = (soma * 10) % 11;
-    if (resto === 10 || resto === 11) resto = 0;
-    if (resto !== parseInt(numeros.charAt(9), 10)) return false;
-
-    soma = 0;
-    for (let i = 0; i < 10; i++) {
-        soma += parseInt(numeros.charAt(i), 10) * (11 - i);
-    }
-
-    resto = (soma * 10) % 11;
-    if (resto === 10 || resto === 11) resto = 0;
-
-    return resto === parseInt(numeros.charAt(10), 10);
-};
-
-const validarTelefone = (telefone) => {
-    const numeros = limparNumeros(telefone);
-    if (numeros.length === 0) return true;
-    return numeros.length === 10 || numeros.length === 11;
-};
 
 // ---------------------------------------------------------
 // ROTA 1: CADASTRAR NOVO USUÁRIO
@@ -142,78 +94,53 @@ app.post('/cadastro', (req, res) => {
     const cpf = limparNumeros(req.body.cpf || '');
     const telefone = limparNumeros(req.body.telefone || '');
 
-    if (!nome) {
-        return res.send({ sucesso: false, mensagem: 'Informe seu nome.' });
-    }
-
-    if (!email) {
-        return res.send({ sucesso: false, mensagem: 'Informe seu e-mail.' });
-    }
-
-    if (!validarEmail(email)) {
-        return res.send({ sucesso: false, mensagem: 'Digite um e-mail válido.' });
-    }
-
-    if (!validarSenha(senha)) {
-        return res.send({ sucesso: false, mensagem: 'A senha precisa ter mais de 6 caracteres e conter letras e números.' });
-    }
-
-    if (!validarCPF(cpf)) {
-        return res.send({ sucesso: false, mensagem: 'CPF inválido. Corrija ou deixe em branco.' });
-    }
-
-    if (!validarTelefone(telefone)) {
-        return res.send({ sucesso: false, mensagem: 'Telefone inválido. Use DDD + número ou deixe em branco.' });
-    }
-
-    const sqlVerificarEmail = 'SELECT id FROM usuarios WHERE email = ? LIMIT 1';
-
-    db.query(sqlVerificarEmail, [email], (erroEmail, resultadoEmail) => {
-        if (erroEmail) {
-            console.error('Erro ao verificar e-mail:', erroEmail);
-            return res.send({ sucesso: false, mensagem: 'Erro ao verificar o e-mail.' });
-        }
-
-        if (resultadoEmail.length > 0) {
-            return res.send({ sucesso: false, mensagem: 'Este e-mail já está cadastrado. Use outro e-mail ou faça login.' });
-        }
-
-        if (cpf) {
-            const sqlVerificarCPF = 'SELECT id FROM usuarios WHERE cpf = ? LIMIT 1';
-
-            db.query(sqlVerificarCPF, [cpf], (erroCPF, resultadoCPF) => {
-                if (erroCPF) {
-                    console.error('Erro ao verificar CPF:', erroCPF);
-                    return res.send({ sucesso: false, mensagem: 'Erro ao verificar o CPF.' });
-                }
-
-                if (resultadoCPF.length > 0) {
-                    return res.send({ sucesso: false, mensagem: 'Este CPF já está cadastrado.' });
-                }
-
-                salvarUsuario();
-            });
-        } else {
-            salvarUsuario();
-        }
-    });
-
-    function salvarUsuario() {
-        const sqlCadastrar = 'INSERT INTO usuarios (nome, email, senha, cpf, telefone) VALUES (?, ?, ?, ?, ?)';
-        const valores = [nome, email, senha, cpf || null, telefone || null];
-
-        db.query(sqlCadastrar, valores, (erro) => {
-            if (erro) {
-                console.error('Erro ao salvar usuário:', erro);
-                return res.send({ sucesso: false, mensagem: 'Erro ao cadastrar. Verifique se as colunas cpf e telefone existem no banco.' });
-            }
-
-            console.log('Novo usuário cadastrado com sucesso!');
-            res.send({ sucesso: true, mensagem: 'Usuário cadastrado com sucesso!' });
+    if (!nome || !email || !senha) {
+        return res.status(400).json({
+            sucesso: false,
+            erro: 'Nome, email e senha são obrigatórios.'
         });
     }
+
+    db.query(
+        `SELECT * FROM usuarios WHERE email = ?`,
+        [email],
+        (erro, resultados) => {
+            if (erro) {
+                console.error('Erro ao verificar email:', erro);
+                return res.status(500).json({
+                    sucesso: false,
+                    erro: 'Erro ao verificar email.'
+                });
+            }
+
+            if (resultados.length > 0) {
+                return res.status(400).json({
+                    sucesso: false,
+                    erro: 'Este email já está cadastrado!'
+                });
+            }
+
+            db.query(
+                `INSERT INTO usuarios (nome, email, senha, cpf, telefone) VALUES (?, ?, ?, ?, ?)`,
+                [nome, email, senha, cpf || null, telefone || null],
+                (errInsert) => {
+                    if (errInsert) {
+                        console.error('Erro ao cadastrar usuário:', errInsert);
+                        return res.status(500).json({
+                            sucesso: false,
+                            erro: 'Erro ao cadastrar usuário.'
+                        });
+                    }
+
+                    res.status(201).json({
+                        sucesso: true,
+                        mensagem: 'Usuário cadastrado com sucesso!'
+                    });
+                }
+            );
+        }
+    );
 });
-// ---------------------------------------------------------
 
 // ---------------------------------------------------------
 // ROTA 2: FAZER LOGIN
@@ -222,24 +149,33 @@ app.post('/login', (req, res) => {
     const email = String(req.body.email || '').trim().toLowerCase();
     const senha = String(req.body.senha || '');
 
-    const sql = 'SELECT id, nome, email, cpf, telefone, imagem FROM usuarios WHERE email = ? AND senha = ? LIMIT 1';
-    
-    db.query(sql, [email, senha], (erro, resultado) => {
-        if (erro) {
-            console.error('Erro ao fazer login:', erro);
-            return res.send({ sucesso: false, mensagem: 'Erro no servidor ao tentar logar.' });
-        }
+    db.query(
+        `SELECT * FROM usuarios WHERE email = ? AND senha = ? LIMIT 1`,
+        [email, senha],
+        (erro, resultados) => {
+            if (erro) {
+                console.error('Erro ao fazer login:', erro);
+                return res.status(500).json({
+                    sucesso: false,
+                    erro: 'Erro ao fazer login.'
+                });
+            }
 
-        if (resultado.length > 0) {
-            console.log('Usuário logado com sucesso!');
-            res.send({ sucesso: true, mensagem: 'Login realizado com sucesso!', usuario: resultado[0] });
-        } else {
-            console.log('Tentativa de login falhou (email ou senha incorretos).');
-            res.send({ sucesso: false, mensagem: 'E-mail ou senha incorretos.' });
+            if (resultados.length > 0) {
+                return res.status(200).json({
+                    sucesso: true,
+                    mensagem: 'Login realizado com sucesso!',
+                    usuario: resultados[0]
+                });
+            }
+
+            res.status(401).json({
+                sucesso: false,
+                erro: 'Email ou senha incorretos.'
+            });
         }
-    });
+    );
 });
-// ---------------------------------------------------------
 
 // ---------------------------------------------------------
 // ROTA 3: CRIAR UMA NOVA CASA
@@ -250,149 +186,166 @@ app.post('/casas', (req, res) => {
     const admin_id = req.body.admin_id;
 
     if (!nome || !admin_id) {
-        return res.send({ sucesso: false, mensagem: 'Nome da casa e usuário são obrigatórios.' });
+        return res.status(400).json({
+            sucesso: false,
+            erro: 'Nome da casa e admin_id são obrigatórios.'
+        });
     }
 
-    const sqlCriarCasa = 'INSERT INTO casas (nome, imagem, admin_id) VALUES (?, ?, ?)';
-    
-    db.query(sqlCriarCasa, [nome, imagem, admin_id], (erro, resultado) => {
-        if (erro) {
-            console.error('Erro ao criar casa:', erro);
-            return res.send({ sucesso: false, mensagem: 'Erro ao salvar a casa no banco.' });
-        }
-
-        const casaCriada = normalizarCasa({
-            id: resultado.insertId,
-            nome,
-            imagem,
-            admin_id
-        }, 'Administrador');
-
-        const sqlAdicionarAdminComoMembro = `
-            INSERT INTO casa_membros (casa_id, usuario_id, tipo)
-            VALUES (?, ?, 'admin')
-            ON DUPLICATE KEY UPDATE tipo = 'admin'
-        `;
-
-        db.query(sqlAdicionarAdminComoMembro, [resultado.insertId, admin_id], (erroMembro) => {
-            if (erroMembro) {
-                console.error('Aviso: casa criada, mas erro ao salvar admin como membro:', erroMembro);
+    db.query(
+        `INSERT INTO casas (nome, imagem, admin_id) VALUES (?, ?, ?)`,
+        [nome, imagem, admin_id],
+        (erro, result) => {
+            if (erro) {
+                console.error('Erro ao criar casa:', erro);
+                return res.status(500).json({
+                    sucesso: false,
+                    erro: 'Erro ao criar casa.'
+                });
             }
 
-            res.send({
-                sucesso: true,
-                mensagem: 'Casa criada com sucesso no banco de dados!',
-                casa: casaCriada
-            });
-        });
-    });
+            const casaId = result.insertId;
+
+            db.query(
+                `
+                INSERT INTO casa_membros (casa_id, usuario_id, tipo)
+                VALUES (?, ?, 'admin')
+                ON DUPLICATE KEY UPDATE tipo = 'admin'
+                `,
+                [casaId, admin_id],
+                (err2) => {
+                    if (err2) {
+                        console.error('Erro ao vincular membro à casa:', err2);
+                        return res.status(500).json({
+                            sucesso: false,
+                            erro: 'Erro ao vincular membro à casa.'
+                        });
+                    }
+
+                    res.status(201).json({
+                        sucesso: true,
+                        mensagem: 'Casa criada com sucesso!',
+                        id: casaId,
+                        casa: {
+                            id: casaId,
+                            nome,
+                            imagem,
+                            admin_id,
+                            adminId: admin_id,
+                            papel: 'admin'
+                        }
+                    });
+                }
+            );
+        }
+    );
 });
-// ---------------------------------------------------------
 
 // ---------------------------------------------------------
-// ROTA 4: ENTRAR COMO CONVIDADO EM UMA CASA PELO ID
+// ROTA 4: SOLICITAR ENTRADA EM UMA CASA
 // ---------------------------------------------------------
 app.post('/casas/entrar', (req, res) => {
-    const codigoCasa = limparNumeros(req.body.codigo || req.body.casa_id || '');
+    const codigoCasa = String(req.body.codigo || '').trim();
     const usuarioId = req.body.usuario_id;
 
-    if (!codigoCasa) {
-        return res.send({ sucesso: false, mensagem: 'Digite o ID da casa.' });
-    }
-
-    if (!usuarioId) {
-        return res.send({ sucesso: false, mensagem: 'Usuário não identificado. Faça login novamente.' });
-    }
-
-    const sqlBuscarCasa = 'SELECT id, nome, imagem, admin_id FROM casas WHERE id = ? LIMIT 1';
-
-    db.query(sqlBuscarCasa, [codigoCasa], (erroCasa, resultadoCasa) => {
-        if (erroCasa) {
-            console.error('Erro ao procurar casa:', erroCasa);
-            return res.send({ sucesso: false, mensagem: 'Erro ao procurar a casa.' });
-        }
-
-        if (resultadoCasa.length === 0) {
-            return res.send({ sucesso: false, mensagem: 'Nenhuma casa encontrada com esse ID.' });
-        }
-
-        const casa = resultadoCasa[0];
-
-        if (String(casa.admin_id) === String(usuarioId)) {
-            return res.send({
-                sucesso: true,
-                mensagem: 'Você já é o administrador desta casa.',
-                casa: normalizarCasa(casa, 'Administrador')
-            });
-        }
-
-        const sqlVerificarMembro = 'SELECT id FROM casa_membros WHERE casa_id = ? AND usuario_id = ? LIMIT 1';
-
-        db.query(sqlVerificarMembro, [casa.id, usuarioId], (erroMembro, resultadoMembro) => {
-            if (erroMembro) {
-                console.error('Erro ao verificar membro:', erroMembro);
-                return res.send({ sucesso: false, mensagem: 'Erro ao verificar sua entrada na casa.' });
-            }
-
-            if (resultadoMembro.length > 0) {
-                return res.send({
-                    sucesso: true,
-                    mensagem: 'Você já participa desta casa.',
-                    casa: normalizarCasa(casa, 'Membro')
-                });
-            }
-
-            const sqlEntrarCasa = "INSERT INTO casa_membros (casa_id, usuario_id, tipo) VALUES (?, ?, 'membro')";
-
-            db.query(sqlEntrarCasa, [casa.id, usuarioId], (erroEntrar) => {
-                if (erroEntrar) {
-                    console.error('Erro ao entrar na casa:', erroEntrar);
-                    return res.send({ sucesso: false, mensagem: 'Erro ao entrar na casa.' });
-                }
-
-                res.send({
-                    sucesso: true,
-                    mensagem: 'Você entrou na casa como convidado!',
-                    casa: normalizarCasa(casa, 'Membro')
-                });
-            });
+    if (!codigoCasa || !usuarioId) {
+        return res.status(400).json({
+            sucesso: false,
+            erro: 'Código da casa e usuário são obrigatórios.'
         });
-    });
+    }
+
+    db.query(
+        `SELECT * FROM casas WHERE id = ?`,
+        [codigoCasa],
+        (erro, casas) => {
+            if (erro) {
+                console.error('Erro ao buscar casa:', erro);
+                return res.status(500).json({
+                    sucesso: false,
+                    erro: 'Erro ao buscar casa.'
+                });
+            }
+
+            if (casas.length === 0) {
+                return res.status(404).json({
+                    sucesso: false,
+                    erro: 'Casa não encontrada! Verifique se o ID está correto.'
+                });
+            }
+
+            db.query(
+                `SELECT * FROM casa_membros WHERE casa_id = ? AND usuario_id = ?`,
+                [codigoCasa, usuarioId],
+                (err, membros) => {
+                    if (err) {
+                        console.error('Erro ao verificar membros:', err);
+                        return res.status(500).json({
+                            sucesso: false,
+                            erro: 'Erro ao verificar membros.'
+                        });
+                    }
+
+                    if (membros.length > 0) {
+                        return res.status(400).json({
+                            sucesso: false,
+                            erro: 'Você já é membro ou sua solicitação está pendente!'
+                        });
+                    }
+
+                    db.query(
+                        `INSERT INTO casa_membros (casa_id, usuario_id, tipo) VALUES (?, ?, 'pendente')`,
+                        [codigoCasa, usuarioId],
+                        (errInsert) => {
+                            if (errInsert) {
+                                console.error('Erro ao solicitar entrada:', errInsert);
+                                return res.status(500).json({
+                                    sucesso: false,
+                                    erro: 'Erro ao solicitar entrada.'
+                                });
+                            }
+
+                            res.status(201).json({
+                                sucesso: true,
+                                mensagem: 'Solicitação enviada! Aguarde o líder aprovar sua entrada.'
+                            });
+                        }
+                    );
+                }
+            );
+        }
+    );
 });
-// ---------------------------------------------------------
 
 // ---------------------------------------------------------
-// ROTA 5: BUSCAR CASAS DO USUÁRIO, COMO ADMIN OU CONVIDADO
+// ROTA 5: BUSCAR CASAS DO USUÁRIO
 // ---------------------------------------------------------
 app.get('/casas/:usuarioId', (req, res) => {
     const usuarioId = req.params.usuarioId;
 
-    const sql = `
-        SELECT DISTINCT
-            c.id,
-            c.nome,
-            c.imagem,
-            c.admin_id,
-            CASE
-                WHEN c.admin_id = ? THEN 'Administrador'
-                ELSE 'Membro'
-            END AS papel
+    const query = `
+        SELECT 
+            c.*,
+            c.admin_id AS adminId,
+            cm.tipo AS papel
         FROM casas c
-        LEFT JOIN casa_membros cm ON cm.casa_id = c.id
-        WHERE c.admin_id = ? OR cm.usuario_id = ?
+        JOIN casa_membros cm ON c.id = cm.casa_id
+        WHERE cm.usuario_id = ? AND cm.tipo != 'pendente'
         ORDER BY c.id DESC
     `;
-    
-    db.query(sql, [usuarioId, usuarioId, usuarioId], (erro, resultados) => {
+
+    db.query(query, [usuarioId], (erro, resultados) => {
         if (erro) {
             console.error('Erro ao buscar casas:', erro);
-            return res.send({ sucesso: false, mensagem: 'Erro ao buscar as casas.' });
+            return res.status(500).json({
+                sucesso: false,
+                erro: 'Erro ao buscar casas.'
+            });
         }
 
-        res.send({ sucesso: true, casas: resultados.map(casa => normalizarCasa(casa, casa.papel)) });
+        res.status(200).json(resultados);
     });
 });
-// ---------------------------------------------------------
 
 // ---------------------------------------------------------
 // ROTA 6: BUSCAR MEMBROS DE UMA CASA
@@ -400,73 +353,781 @@ app.get('/casas/:usuarioId', (req, res) => {
 app.get('/casas/:casaId/membros', (req, res) => {
     const casaId = req.params.casaId;
 
-    const sql = `
-        SELECT u.id, u.nome, u.imagem, c.id AS casa_id, 'admin' AS tipo
-        FROM casas c
-        INNER JOIN usuarios u ON u.id = c.admin_id
-        WHERE c.id = ?
-
-        UNION
-
-        SELECT u.id, u.nome, u.imagem, cm.casa_id, cm.tipo
-        FROM casa_membros cm
-        INNER JOIN usuarios u ON u.id = cm.usuario_id
-        INNER JOIN casas c ON c.id = cm.casa_id
-        WHERE cm.casa_id = ? AND cm.usuario_id <> c.admin_id
+    const query = `
+        SELECT 
+            u.id,
+            u.nome,
+            u.imagem,
+            cm.tipo,
+            cm.casa_id,
+            cm.casa_id AS casaId
+        FROM usuarios u
+        JOIN casa_membros cm ON u.id = cm.usuario_id
+        WHERE cm.casa_id = ?
+        ORDER BY
+            CASE WHEN cm.tipo = 'admin' THEN 0 ELSE 1 END,
+            u.nome ASC
     `;
 
-    db.query(sql, [casaId, casaId], (erro, resultados) => {
+    db.query(query, [casaId], (erro, resultados) => {
         if (erro) {
             console.error('Erro ao buscar membros:', erro);
-            return res.send({ sucesso: false, mensagem: 'Erro ao buscar membros da casa.' });
+            return res.status(500).json({
+                sucesso: false,
+                erro: 'Erro ao buscar membros.'
+            });
         }
 
-        res.send({ sucesso: true, membros: resultados.map(normalizarMembro) });
+        res.status(200).json(resultados);
     });
 });
-// ---------------------------------------------------------
 
 // ---------------------------------------------------------
 // ROTA 7: EXCLUIR CASA DO USUÁRIO LOGADO
 // ---------------------------------------------------------
 app.delete('/casas/:casaId', (req, res) => {
     const casaId = req.params.casaId;
-    const { admin_id } = req.body;
 
-    if (!admin_id) {
-        return res.send({ sucesso: false, mensagem: 'Usuário obrigatório para excluir a casa.' });
-    }
-
-    db.query('DELETE FROM casa_membros WHERE casa_id = ?', [casaId], (erroMembros) => {
-        if (erroMembros) {
-            console.error('Erro ao excluir membros da casa:', erroMembros);
-            return res.send({ sucesso: false, mensagem: 'Erro ao excluir os membros da casa.' });
-        }
-
-        db.query('DELETE FROM pets WHERE casa_id = ?', [casaId], (erroPets) => {
-            if (erroPets) {
-                console.error('Erro ao excluir pets da casa:', erroPets);
-                return res.send({ sucesso: false, mensagem: 'Erro ao excluir os pets da casa.' });
+    db.query(
+        `DELETE a FROM agendamentos a INNER JOIN pets p ON p.id = a.pet_id WHERE p.casa_id = ?`,
+        [casaId],
+        (errAgendamentos) => {
+            if (errAgendamentos) {
+                console.error('Erro ao limpar agendamentos:', errAgendamentos);
+                return res.status(500).json({
+                    sucesso: false,
+                    erro: 'Erro ao limpar agendamentos da casa.'
+                });
             }
 
-            db.query('DELETE FROM casas WHERE id = ? AND admin_id = ?', [casaId, admin_id], (erroCasa, resultado) => {
-                if (erroCasa) {
-                    console.error('Erro ao excluir casa:', erroCasa);
-                    return res.send({ sucesso: false, mensagem: 'Erro ao excluir casa.' });
-                }
+            db.query(
+                `DELETE m FROM metas_cuidados m INNER JOIN pets p ON p.id = m.pet_id WHERE p.casa_id = ?`,
+                [casaId],
+                (errMetas) => {
+                    if (errMetas) {
+                        console.error('Erro ao limpar metas:', errMetas);
+                        return res.status(500).json({
+                            sucesso: false,
+                            erro: 'Erro ao limpar metas da casa.'
+                        });
+                    }
 
-                if (resultado.affectedRows === 0) {
-                    return res.send({ sucesso: false, mensagem: 'Casa não encontrada para este usuário.' });
-                }
+                    db.query(
+                        `DELETE FROM casa_membros WHERE casa_id = ?`,
+                        [casaId],
+                        (err1) => {
+                            if (err1) {
+                                console.error('Erro ao limpar membros da casa:', err1);
+                                return res.status(500).json({
+                                    sucesso: false,
+                                    erro: 'Erro ao limpar membros da casa.'
+                                });
+                            }
 
-                res.send({ sucesso: true, mensagem: 'Casa excluída com sucesso!' });
+                            db.query(
+                                `DELETE FROM pets WHERE casa_id = ?`,
+                                [casaId],
+                                (err2) => {
+                                    if (err2) {
+                                        console.error('Erro ao limpar pets da casa:', err2);
+                                        return res.status(500).json({
+                                            sucesso: false,
+                                            erro: 'Erro ao limpar pets da casa.'
+                                        });
+                                    }
+
+                                    db.query(
+                                        `DELETE FROM casas WHERE id = ?`,
+                                        [casaId],
+                                        (err3) => {
+                                            if (err3) {
+                                                console.error('Erro ao excluir casa:', err3);
+                                                return res.status(500).json({
+                                                    sucesso: false,
+                                                    erro: 'Erro ao excluir casa.'
+                                                });
+                                            }
+
+                                            res.status(200).json({
+                                                sucesso: true,
+                                                mensagem: 'Casa excluída com sucesso!'
+                                            });
+                                        }
+                                    );
+                                }
+                            );
+                        }
+                    );
+                }
+            );
+        }
+    );
+});
+
+// ---------------------------------------------------------
+// ROTA 8: CADASTRAR UM NOVO PET
+// ---------------------------------------------------------
+app.post('/pets', (req, res) => {
+    const nome = String(req.body.nome || '').trim();
+    const tipo = String(req.body.tipo || '').trim();
+    const raca = String(req.body.raca || '').trim();
+    const nascimento = String(req.body.nascimento || '').trim();
+    const imagem = req.body.imagem || null;
+    const casa_id = req.body.casa_id;
+
+    if (!nome || !casa_id) {
+        return res.status(400).json({
+            sucesso: false,
+            erro: 'Nome do pet e ID da casa são obrigatórios!'
+        });
+    }
+
+    db.query(
+        `INSERT INTO pets (nome, tipo, raca, nascimento, imagem, casa_id) VALUES (?, ?, ?, ?, ?, ?)`,
+        [nome, tipo, raca, nascimento, imagem, casa_id],
+        (erro, resultado) => {
+            if (erro) {
+                console.error('Erro ao cadastrar pet:', erro);
+                return res.status(500).json({
+                    sucesso: false,
+                    erro: 'Erro ao cadastrar pet.'
+                });
+            }
+
+            res.status(201).json({
+                sucesso: true,
+                mensagem: 'Pet cadastrado com sucesso!',
+                id: resultado.insertId,
+                pet: {
+                    id: resultado.insertId,
+                    nome,
+                    tipo,
+                    raca,
+                    nascimento,
+                    imagem,
+                    casa_id,
+                    casaId: casa_id
+                }
             });
+        }
+    );
+});
+
+// ---------------------------------------------------------
+// ROTA 9: LISTAR PETS DE UMA CASA
+// ---------------------------------------------------------
+app.get('/casas/:casaId/pets', (req, res) => {
+    const casaId = req.params.casaId;
+
+    db.query(
+        `SELECT *, casa_id AS casaId FROM pets WHERE casa_id = ? ORDER BY id DESC`,
+        [casaId],
+        (erro, resultados) => {
+            if (erro) {
+                console.error('Erro ao buscar pets:', erro);
+                return res.status(500).json({
+                    sucesso: false,
+                    erro: 'Erro ao buscar pets.'
+                });
+            }
+
+            res.status(200).json(resultados);
+        }
+    );
+});
+
+// ---------------------------------------------------------
+// ROTA 10: CADASTRAR UM NOVO AGENDAMENTO
+// ---------------------------------------------------------
+app.post('/agendamentos', (req, res) => {
+    const {
+        pet_id,
+        texto_data,
+        texto_horario,
+        compromisso,
+        observacao
+    } = req.body;
+
+    console.log('CHEGOU UM PEDIDO DE AGENDAMENTO:', req.body);
+
+    if (!pet_id || !texto_data || !texto_horario || !compromisso) {
+        return res.status(400).json({
+            sucesso: false,
+            erro: 'Dados obrigatórios do agendamento estão faltando!'
+        });
+    }
+
+    db.query(
+        `INSERT INTO agendamentos (pet_id, texto_data, texto_horario, compromisso, observacao) VALUES (?, ?, ?, ?, ?)`,
+        [pet_id, texto_data, texto_horario, compromisso, observacao || null],
+        (erro, resultado) => {
+            if (erro) {
+                console.error('Erro ao criar agendamento:', erro);
+                return res.status(500).json({
+                    sucesso: false,
+                    erro: 'Erro ao criar agendamento.'
+                });
+            }
+
+            res.status(201).json({
+                sucesso: true,
+                mensagem: 'Agendamento criado com sucesso!',
+                id: resultado.insertId
+            });
+        }
+    );
+});
+
+// ---------------------------------------------------------
+// ROTA 11: LISTAR AGENDAMENTOS DE UM PET
+// ---------------------------------------------------------
+app.get('/pets/:petId/agendamentos', (req, res) => {
+    const petId = req.params.petId;
+
+    limparAgendamentosExpiradosDoPet(petId, (erroLimpeza) => {
+        if (erroLimpeza) {
+            console.error('Erro ao limpar agendamentos expirados:', erroLimpeza);
+            return res.status(500).json({
+                sucesso: false,
+                erro: 'Erro ao limpar agendamentos expirados.'
+            });
+        }
+
+        const query = `
+            SELECT *
+            FROM agendamentos
+            WHERE pet_id = ?
+            ORDER BY STR_TO_DATE(
+                CONCAT(texto_data, ' ', COALESCE(NULLIF(texto_horario, ''), '00:00')),
+                '%d/%m/%Y %H:%i'
+            ) ASC, id DESC
+        `;
+
+        db.query(query, [petId], (erro, resultados) => {
+            if (erro) {
+                console.error('Erro ao buscar agendamentos:', erro);
+                return res.status(500).json({
+                    sucesso: false,
+                    erro: 'Erro ao buscar agendamentos.'
+                });
+            }
+
+            res.status(200).json(resultados);
         });
     });
 });
-// ---------------------------------------------------------
 
-// 5. Ligando o servidor na porta 3000
+// ---------------------------------------------------------
+// ROTA 12: BUSCAR AS METAS DE UM PET
+// ---------------------------------------------------------
+app.get('/pets/:petId/metas', (req, res) => {
+    const petId = req.params.petId;
+
+    db.query(
+        `SELECT * FROM metas_cuidados WHERE pet_id = ? LIMIT 1`,
+        [petId],
+        (erro, resultados) => {
+            if (erro) {
+                console.error('Erro ao buscar metas:', erro);
+                return res.status(500).json({
+                    sucesso: false,
+                    erro: 'Erro ao buscar metas.'
+                });
+            }
+
+            res.status(200).json(resultados);
+        }
+    );
+});
+
+// ---------------------------------------------------------
+// ROTA 13: ATUALIZAR OU CRIAR AS METAS DO PET
+// ---------------------------------------------------------
+app.post('/pets/:petId/metas', (req, res) => {
+    const petId = req.params.petId;
+
+    const {
+        comida_meta,
+        comida_feita,
+        comida_periodo,
+        passeio_meta,
+        passeio_feita,
+        passeio_periodo,
+        curativo_meta,
+        curativo_feita,
+        curativo_periodo,
+        vet_meta,
+        vet_feita,
+        vet_periodo
+    } = req.body;
+
+    const dados = {
+        comida_meta: Number(comida_meta ?? 3),
+        comida_feita: Number(comida_feita ?? 0),
+        comida_periodo: comida_periodo || 'Diário',
+
+        passeio_meta: Number(passeio_meta ?? 2),
+        passeio_feita: Number(passeio_feita ?? 0),
+        passeio_periodo: passeio_periodo || 'Diário',
+
+        curativo_meta: Number(curativo_meta ?? 0),
+        curativo_feita: Number(curativo_feita ?? 0),
+        curativo_periodo: curativo_periodo || 'Mensal',
+
+        vet_meta: Number(vet_meta ?? 1),
+        vet_feita: Number(vet_feita ?? 0),
+        vet_periodo: vet_periodo || 'Semestral'
+    };
+
+    db.query(
+        `SELECT * FROM metas_cuidados WHERE pet_id = ? LIMIT 1`,
+        [petId],
+        (erro, resultados) => {
+            if (erro) {
+                console.error('Erro ao verificar metas:', erro);
+                return res.status(500).json({
+                    sucesso: false,
+                    erro: 'Erro ao verificar metas no banco.'
+                });
+            }
+
+            if (resultados.length > 0) {
+                const queryUpdate = `
+                    UPDATE metas_cuidados SET
+                        comida_meta = ?,
+                        comida_feita = ?,
+                        comida_periodo = ?,
+
+                        passeio_meta = ?,
+                        passeio_feita = ?,
+                        passeio_periodo = ?,
+
+                        curativo_meta = ?,
+                        curativo_feita = ?,
+                        curativo_periodo = ?,
+
+                        vet_meta = ?,
+                        vet_feita = ?,
+                        vet_periodo = ?
+                    WHERE pet_id = ?
+                `;
+
+                db.query(
+                    queryUpdate,
+                    [
+                        dados.comida_meta,
+                        dados.comida_feita,
+                        dados.comida_periodo,
+
+                        dados.passeio_meta,
+                        dados.passeio_feita,
+                        dados.passeio_periodo,
+
+                        dados.curativo_meta,
+                        dados.curativo_feita,
+                        dados.curativo_periodo,
+
+                        dados.vet_meta,
+                        dados.vet_feita,
+                        dados.vet_periodo,
+
+                        petId
+                    ],
+                    (err) => {
+                        if (err) {
+                            console.error('Erro ao atualizar metas:', err);
+                            return res.status(500).json({
+                                sucesso: false,
+                                erro: 'Erro ao atualizar metas.'
+                            });
+                        }
+
+                        res.status(200).json({
+                            sucesso: true,
+                            mensagem: 'Metas atualizadas com sucesso!'
+                        });
+                    }
+                );
+            } else {
+                const queryInsert = `
+                    INSERT INTO metas_cuidados (
+                        pet_id,
+
+                        comida_meta,
+                        comida_feita,
+                        comida_periodo,
+
+                        passeio_meta,
+                        passeio_feita,
+                        passeio_periodo,
+
+                        curativo_meta,
+                        curativo_feita,
+                        curativo_periodo,
+
+                        vet_meta,
+                        vet_feita,
+                        vet_periodo
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                `;
+
+                db.query(
+                    queryInsert,
+                    [
+                        petId,
+
+                        dados.comida_meta,
+                        dados.comida_feita,
+                        dados.comida_periodo,
+
+                        dados.passeio_meta,
+                        dados.passeio_feita,
+                        dados.passeio_periodo,
+
+                        dados.curativo_meta,
+                        dados.curativo_feita,
+                        dados.curativo_periodo,
+
+                        dados.vet_meta,
+                        dados.vet_feita,
+                        dados.vet_periodo
+                    ],
+                    (err) => {
+                        if (err) {
+                            console.error('Erro ao criar metas:', err);
+                            return res.status(500).json({
+                                sucesso: false,
+                                erro: 'Erro ao criar novas metas.'
+                            });
+                        }
+
+                        res.status(201).json({
+                            sucesso: true,
+                            mensagem: 'Metas criadas com sucesso!'
+                        });
+                    }
+                );
+            }
+        }
+    );
+});
+
+// ---------------------------------------------------------
+// ROTA 14: APROVAR MEMBRO PENDENTE
+// ---------------------------------------------------------
+app.put('/casas/membros/aprovar', (req, res) => {
+    const { casa_id, usuario_id } = req.body;
+
+    db.query(
+        `UPDATE casa_membros SET tipo = 'convidado' WHERE casa_id = ? AND usuario_id = ?`,
+        [casa_id, usuario_id],
+        (err) => {
+            if (err) {
+                console.error('Erro ao aprovar membro:', err);
+                return res.status(500).json({
+                    sucesso: false,
+                    erro: 'Erro ao aprovar membro.'
+                });
+            }
+
+            res.status(200).json({
+                sucesso: true,
+                mensagem: 'Membro aprovado com sucesso!'
+            });
+        }
+    );
+});
+
+// ---------------------------------------------------------
+// ROTA 15: REJEITAR MEMBRO PENDENTE
+// ---------------------------------------------------------
+app.delete('/casas/membros/rejeitar', (req, res) => {
+    const { casa_id, usuario_id } = req.body;
+
+    db.query(
+        `DELETE FROM casa_membros WHERE casa_id = ? AND usuario_id = ? AND tipo = 'pendente'`,
+        [casa_id, usuario_id],
+        (err) => {
+            if (err) {
+                console.error('Erro ao rejeitar membro:', err);
+                return res.status(500).json({
+                    sucesso: false,
+                    erro: 'Erro ao rejeitar membro.'
+                });
+            }
+
+            res.status(200).json({
+                sucesso: true,
+                mensagem: 'Solicitação rejeitada.'
+            });
+        }
+    );
+});
+
+// ---------------------------------------------------------
+// ROTA 16: EXCLUIR UM PET DA CASA COM POST
+// ---------------------------------------------------------
+app.post('/pets/:petId/excluir', (req, res) => {
+    const petId = req.params.petId;
+
+    console.log('PEDIDO PARA EXCLUIR PET VIA POST:', petId);
+
+    db.query(
+        `DELETE FROM agendamentos WHERE pet_id = ?`,
+        [petId],
+        (erroAgendamentos) => {
+            if (erroAgendamentos) {
+                console.error('Erro ao excluir agendamentos do pet:', erroAgendamentos);
+                return res.status(500).json({
+                    sucesso: false,
+                    erro: 'Erro ao excluir agendamentos do pet.'
+                });
+            }
+
+            db.query(
+                `DELETE FROM metas_cuidados WHERE pet_id = ?`,
+                [petId],
+                (erroMetas) => {
+                    if (erroMetas) {
+                        console.error('Erro ao excluir metas do pet:', erroMetas);
+                        return res.status(500).json({
+                            sucesso: false,
+                            erro: 'Erro ao excluir metas do pet.'
+                        });
+                    }
+
+                    db.query(
+                        `DELETE FROM pets WHERE id = ?`,
+                        [petId],
+                        (erroPet, resultado) => {
+                            if (erroPet) {
+                                console.error('Erro ao excluir pet:', erroPet);
+                                return res.status(500).json({
+                                    sucesso: false,
+                                    erro: 'Erro ao excluir o pet.'
+                                });
+                            }
+
+                            if (resultado.affectedRows === 0) {
+                                return res.status(404).json({
+                                    sucesso: false,
+                                    erro: 'Pet não encontrado.'
+                                });
+                            }
+
+                            res.status(200).json({
+                                sucesso: true,
+                                mensagem: 'Pet removido com sucesso!'
+                            });
+                        }
+                    );
+                }
+            );
+        }
+    );
+});
+
+// ---------------------------------------------------------
+// ROTA 17: EXCLUIR UM PET DA CASA COM DELETE
+// ---------------------------------------------------------
+app.delete('/pets/:petId', (req, res) => {
+    const petId = req.params.petId;
+
+    console.log('PEDIDO PARA EXCLUIR PET VIA DELETE:', petId);
+
+    db.query(
+        `DELETE FROM agendamentos WHERE pet_id = ?`,
+        [petId],
+        (erroAgendamentos) => {
+            if (erroAgendamentos) {
+                console.error('Erro ao excluir agendamentos do pet:', erroAgendamentos);
+                return res.status(500).json({
+                    sucesso: false,
+                    erro: 'Erro ao excluir agendamentos do pet.'
+                });
+            }
+
+            db.query(
+                `DELETE FROM metas_cuidados WHERE pet_id = ?`,
+                [petId],
+                (erroMetas) => {
+                    if (erroMetas) {
+                        console.error('Erro ao excluir metas do pet:', erroMetas);
+                        return res.status(500).json({
+                            sucesso: false,
+                            erro: 'Erro ao excluir metas do pet.'
+                        });
+                    }
+
+                    db.query(
+                        `DELETE FROM pets WHERE id = ?`,
+                        [petId],
+                        (erroPet, resultado) => {
+                            if (erroPet) {
+                                console.error('Erro ao excluir pet:', erroPet);
+                                return res.status(500).json({
+                                    sucesso: false,
+                                    erro: 'Erro ao excluir o pet.'
+                                });
+                            }
+
+                            if (resultado.affectedRows === 0) {
+                                return res.status(404).json({
+                                    sucesso: false,
+                                    erro: 'Pet não encontrado.'
+                                });
+                            }
+
+                            res.status(200).json({
+                                sucesso: true,
+                                mensagem: 'Pet removido com sucesso!'
+                            });
+                        }
+                    );
+                }
+            );
+        }
+    );
+});
+
+// ---------------------------------------------------------
+// ROTA 18: EXCLUIR UM AGENDAMENTO DO CALENDÁRIO
+// ---------------------------------------------------------
+app.delete('/agendamentos/:id', (req, res) => {
+    const agendamentoId = req.params.id;
+
+    console.log('PEDIDO PARA EXCLUIR AGENDAMENTO:', agendamentoId);
+
+    db.query(
+        `DELETE FROM agendamentos WHERE id = ?`,
+        [agendamentoId],
+        (erro, resultado) => {
+            if (erro) {
+                console.error('Erro ao excluir agendamento:', erro);
+                return res.status(500).json({
+                    sucesso: false,
+                    erro: 'Erro ao excluir agendamento.'
+                });
+            }
+
+            if (resultado.affectedRows === 0) {
+                return res.status(404).json({
+                    sucesso: false,
+                    erro: 'Agendamento não encontrado.'
+                });
+            }
+
+            res.status(200).json({
+                sucesso: true,
+                mensagem: 'Agendamento removido com sucesso!'
+            });
+        }
+    );
+});
+
+// ---------------------------------------------------------
+// ROTA 19: ATUALIZAR IMAGEM DA CASA
+// ---------------------------------------------------------
+app.put('/casas/:id/imagem', (req, res) => {
+    const casaId = req.params.id;
+    const { imagem } = req.body;
+
+    console.log('----------------------------------------');
+    console.log('PEDIDO PARA ATUALIZAR IMAGEM DA CASA');
+    console.log('CASA ID:', casaId);
+    console.log('TAMANHO DA IMAGEM:', imagem ? imagem.length : 0);
+    console.log('----------------------------------------');
+
+    if (!imagem) {
+        return res.status(400).json({
+            sucesso: false,
+            erro: 'Nenhuma imagem foi enviada.'
+        });
+    }
+
+    db.query(
+        `UPDATE casas SET imagem = ? WHERE id = ?`,
+        [imagem, casaId],
+        (erro, resultado) => {
+            if (erro) {
+                console.error('Erro ao atualizar imagem da casa:', erro);
+
+                return res.status(500).json({
+                    sucesso: false,
+                    erro: 'Erro ao atualizar imagem da casa.',
+                    detalhes: erro.message
+                });
+            }
+
+            if (resultado.affectedRows === 0) {
+                return res.status(404).json({
+                    sucesso: false,
+                    erro: 'Casa não encontrada.'
+                });
+            }
+
+            return res.status(200).json({
+                sucesso: true,
+                mensagem: 'Imagem da casa atualizada com sucesso!',
+                imagem
+            });
+        }
+    );
+});
+
+// ---------------------------------------------------------
+// ROTA 20: ATUALIZAR IMAGEM DO PET
+// ---------------------------------------------------------
+app.put('/pets/:id/imagem', (req, res) => {
+    const petId = req.params.id;
+    const { imagem } = req.body;
+
+    console.log('----------------------------------------');
+    console.log('PEDIDO PARA ATUALIZAR IMAGEM DO PET');
+    console.log('PET ID:', petId);
+    console.log('TAMANHO DA IMAGEM:', imagem ? imagem.length : 0);
+    console.log('----------------------------------------');
+
+    if (!imagem) {
+        return res.status(400).json({
+            sucesso: false,
+            erro: 'Nenhuma imagem foi enviada.'
+        });
+    }
+
+    db.query(
+        `UPDATE pets SET imagem = ? WHERE id = ?`,
+        [imagem, petId],
+        (erro, resultado) => {
+            if (erro) {
+                console.error('Erro ao atualizar imagem do pet:', erro);
+
+                return res.status(500).json({
+                    sucesso: false,
+                    erro: 'Erro ao atualizar imagem do pet.',
+                    detalhes: erro.message
+                });
+            }
+
+            if (resultado.affectedRows === 0) {
+                return res.status(404).json({
+                    sucesso: false,
+                    erro: 'Pet não encontrado.'
+                });
+            }
+
+            return res.status(200).json({
+                sucesso: true,
+                mensagem: 'Imagem do pet atualizada com sucesso!',
+                imagem
+            });
+        }
+    );
+});
+
+// ---------------------------------------------------------
+// 5. Ligando o servidor
+// ---------------------------------------------------------
 app.listen(3000, '0.0.0.0', () => {
     console.log('Servidor do MeuPets rodando na porta 3000! 🚀');
 });

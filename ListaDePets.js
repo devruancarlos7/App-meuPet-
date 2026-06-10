@@ -1,4 +1,4 @@
-import React, { useState } from 'react'; 
+import React, { useState, useEffect } from 'react'; 
 import { View, Text, TouchableOpacity, StyleSheet, Image, ScrollView, TextInput, ActivityIndicator, SafeAreaView, Platform, LayoutAnimation, UIManager } from 'react-native'; 
 import { LinearGradient } from 'expo-linear-gradient'; 
 import { StatusBar } from 'expo-status-bar'; 
@@ -8,9 +8,43 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true); 
 }
 
-export default function ListaDePets({ setTelaAtual, pets, casaAtual, setPetAtual, usuarioAtual, modoNoturno }) {
+export default function ListaDePets({ setTelaAtual, pets, setPets, casaAtual, setPetAtual, usuarioAtual, modoNoturno }) {
+  
+  // 1. Variáveis de Estado
+  const [pesquisa, setPesquisa] = useState(''); 
+  const [sugestoes, setSugestoes] = useState([]); 
+  const [carregando, setCarregando] = useState(false); 
+  const [resultado, setResultado] = useState(null);
+
+  // 2. Busca os pets do banco de dados ao carregar a tela
+  useEffect(() => {
+    const buscarPets = async () => {
+      if (!casaAtual?.id) return;
+      
+      try {
+        setCarregando(true);
+        // Faz a requisição para a Rota 9 do Backend
+        const resposta = await fetch(`http://192.168.1.245:3000/casas/${casaAtual.id}/pets`);
+        
+        if (resposta.ok) {
+          const dadosPets = await resposta.json();
+          // Atualiza a memória do aplicativo com os pets que vieram do banco
+          setPets(dadosPets); 
+        }
+      } catch (erro) {
+        console.error("Erro ao buscar pets da casa:", erro);
+      } finally {
+        setCarregando(false);
+      }
+    };
+
+    buscarPets();
+  }, [casaAtual?.id]); // Executa toda vez que o ID da casa mudar
+
+  // 3. Verificação de Admin
   const isAdmin = casaAtual?.adminId === usuarioAtual?.id;
 
+  // 4. Banco de Raças Falsas para a IA
   const bancoDeRacas = [ 
     { id: '1', nome: 'Vira-lata (Cachorro)', descricao: 'Cães sem raça definida são únicos e leais.', expectativa: '12 a 15 anos', problemas: 'Saudáveis (vigor híbrido).', dica: 'Muito amor e passeios!' }, 
     { id: '2', nome: 'Vira-lata (Gato)', descricao: 'Gatos SRD são espertos e se adaptam bem.', expectativa: '15 a 20 anos', problemas: 'Precisam de vacinas anuais.', dica: 'Arranhadores e caixas de papelão.' }, 
@@ -18,12 +52,8 @@ export default function ListaDePets({ setTelaAtual, pets, casaAtual, setPetAtual
     { id: '4', nome: 'Golden Retriever', descricao: 'Dóceis, brincalhões e pacientes.', expectativa: '10 a 12 anos', problemas: 'Displasia de quadril.', dica: 'Precisam de muito exercício.' } 
   ];
 
-  const [pesquisa, setPesquisa] = useState(''); 
-  const [sugestoes, setSugestoes] = useState([]); 
-  const [carregando, setCarregando] = useState(false); 
-  const [resultado, setResultado] = useState(null);
-
-  const petsDestaCasa = pets?.filter((pet) => pet.casaId === casaAtual?.id) || [];
+  // 5. AQUI ESTÁ A LINHA CORRIGIDA! (Filtra aceitando casaId ou casa_id))
+  const petsDestaCasa = pets?.filter((pet) => String(pet.casaId ?? pet.casa_id) === String(casaAtual?.id)) || [];
 
   const navegarComAnimacao = (tela) => { 
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); 
