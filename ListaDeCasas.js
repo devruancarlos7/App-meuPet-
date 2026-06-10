@@ -1,29 +1,83 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image, ScrollView, SafeAreaView, Platform, LayoutAnimation, UIManager } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { FontAwesome5, Ionicons, Feather } from '@expo/vector-icons';
 
-// Mágica da animação no Androidd
+const API_URL = 'http://192.168.1.245:3000';
+
+// Mágica da animação no Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
+const normalizarCasa = (casa) => ({
+  ...casa,
+  adminId: casa.adminId ?? casa.admin_id,
+  admin_id: casa.admin_id ?? casa.adminId,
+  papel: casa.papel,
+});
+
+const normalizarMembro = (membro) => ({
+  ...membro,
+  casaId: membro.casaId ?? membro.casa_id,
+  casa_id: membro.casa_id ?? membro.casaId,
+});
+
 // 👉 AGORA A TELA RECEBE A VARIÁVEL modoNoturno
-export default function ListaDeCasas({ setTelaAtual, casas, setCasaAtual, usuarioAtual, membros, modoNoturno }) {
+export default function ListaDeCasas({ setTelaAtual, casas, setCasas, setCasaAtual, usuarioAtual, membros, setMembros, modoNoturno }) {
   
-  const minhasCasas = casas?.filter(casa => 
-    casa.adminId === usuarioAtual?.id || membros?.some(m => m.casaId === casa.id && m.id === usuarioAtual?.id) 
-  ) || [];
+  useEffect(() => {
+    const buscarCasasDoUsuario = async () => {
+      if (!usuarioAtual?.id || !setCasas) return;
+
+      try {
+        const resposta = await fetch(`${API_URL}/casas/${usuarioAtual.id}`);
+        const dados = await resposta.json();
+
+        if (dados.sucesso) {
+          const casasDoUsuario = (dados.casas || []).map(normalizarCasa);
+          setCasas(casasDoUsuario);
+        }
+      } catch (error) {
+        console.error('Erro ao buscar casas:', error);
+      }
+    };
+
+    buscarCasasDoUsuario();
+  }, [usuarioAtual?.id]);
+
+  const minhasCasas = (casas || []).map(normalizarCasa);
 
   const navegarComAnimacao = (tela) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setTelaAtual(tela);
   };
 
-  const entrarNaCasa = (casa) => {
+  const entrarNaCasa = async (casa) => {
+    const casaNormalizada = normalizarCasa(casa);
+
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setCasaAtual(casa);
+    setCasaAtual(casaNormalizada);
+
+    // Busca os membros da casa para a tela ConfigurarCasa conseguir mostrar administrador e convidados.
+    try {
+      const resposta = await fetch(`${API_URL}/casas/${casaNormalizada.id}/membros`);
+      const dados = await resposta.json();
+
+      if (dados.sucesso && setMembros) {
+        const membrosDaCasa = (dados.membros || []).map(normalizarMembro);
+
+        setMembros((listaAtual) => {
+          const listaSegura = Array.isArray(listaAtual) ? listaAtual : membros || [];
+          const membrosDeOutrasCasas = listaSegura.filter(m => String(m.casaId ?? m.casa_id) !== String(casaNormalizada.id));
+          return [...membrosDeOutrasCasas, ...membrosDaCasa];
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao buscar membros da casa:', error);
+    }
+
     setTelaAtual('ListaDePets');
   };
 
@@ -101,7 +155,7 @@ export default function ListaDeCasas({ setTelaAtual, casas, setCasaAtual, usuari
                       {casa.nome}
                     </Text>
                     <Text style={styles.statusCasa}>
-                      {casa.adminId === usuarioAtual?.id ? 'Administrador' : 'Membro'}
+                      {casa.papel || (String(casa.adminId ?? casa.admin_id) === String(usuarioAtual?.id) ? 'Administrador' : 'Membro')}
                     </Text>
                   </View>
 

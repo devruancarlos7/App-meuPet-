@@ -53,28 +53,55 @@ export default function TelaNovoPet({ setTelaAtual, pets, setPets, casaAtual, mo
     }
   };
 
-  const handleCriarPet = () => {
+  const handleCriarPet = async () => {
     if (nome.trim() === '') {
       alert('Por favor, digite o nome do pet!');
       return;
     }
 
-    // Cria o novo pet associado à casa atual
-    const novoPet = {
-      id: Math.random().toString(36).substring(7),
-      nome: nome,
-      tipo: tipo,
-      raca: raca,
-      nascimento: nascimento,
-      // Se não escolher foto, coloca um avatar padrão de patinha
-      imagem: imagemSelecionada || 'https://cdn-icons-png.flaticon.com/512/616/616430.png',
-      casaId: casaAtual?.id
-    };
+    try {
+      // 1. Empacotamos os dados que o usuário digitou
+      const dadosDoPet = {
+        nome: nome,
+        tipo: tipo,
+        raca: raca,
+        nascimento: nascimento,
+        imagem: imagemSelecionada,
+        casa_id: casaAtual.id // Pegamos o ID da casa onde o usuário está no momento
+      };
 
-    // Salva o pet e volta para a lista de forma fluida
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setPets([...pets, novoPet]);
-    setTelaAtual('ListaDePets');
+      // 2. Enviamos para a Rota 8 do nosso backend
+      const resposta = await fetch('http://192.168.1.245:3000/pets', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(dadosDoPet)
+      });
+
+      const json = await resposta.json();
+
+      // 3. Verificamos se o backend disse que deu tudo certo
+      if (resposta.ok) {
+        alert('Pet criado com sucesso! 🐾');
+        
+        // Adicionamos o novo pet à lista local do App para ele aparecer na hora na tela
+        const novoPetLocal = {
+          ...dadosDoPet,
+          id: json.id,
+          casaId: casaAtual.id
+        };
+        setPets([...pets, novoPetLocal]);
+        
+        // Volta para a tela da lista de pets
+        navegarComAnimacao('ListaDePets'); 
+      } else {
+        alert('Erro ao criar pet: ' + json.erro);
+      }
+    } catch (erro) {
+      console.error("Erro ao enviar pet para o banco:", erro);
+      alert('Erro de conexão com o servidor. Verifique se o backend está rodando!');
+    }
   };
 
   // 👉 CORES DO MODO NOTURNO

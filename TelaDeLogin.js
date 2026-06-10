@@ -4,7 +4,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { Feather, Ionicons } from '@expo/vector-icons';
 
-export default function TelaDeLogin({ setTelaAtual, setUsuarioAtual, modoNoturno }) {
+const API_URL = 'http://192.168.1.245:3000';
+
+export default function TelaDeLogin({ setTelaAtual, setUsuarioAtual, onLogin, modoNoturno }) {
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
 
@@ -15,8 +17,8 @@ export default function TelaDeLogin({ setTelaAtual, setUsuarioAtual, modoNoturno
     }
 
     try {
-      // Bate na porta do servidor MySQL
-      const resposta = await fetch('http://192.168.1.180:3000/login', {
+      // ⚠️ ATENÇÃO: Troque "SEU_IP" pelo IP atual do seu notebook! (ex: 192.168.1.XXX)
+      const resposta = await fetch(`${API_URL}/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email, senha: senha }),
@@ -25,13 +27,16 @@ export default function TelaDeLogin({ setTelaAtual, setUsuarioAtual, modoNoturno
       const dados = await resposta.json();
 
       if (dados.sucesso) {
-        // 🔥 A MÁGICA ACONTECE AQUI: Salva o seu usuário real do banco
-        // (Garante que vai pegar o objeto certinho, seja lista ou não)
-        const usuarioReal = Array.isArray(dados.usuario) ? dados.usuario : dados.usuario;
-        setUsuarioAtual(usuarioReal);
-        
-        // Vai para as casas!
-        setTelaAtual('Casas');
+        // 🔥 A MÁGICA E CORREÇÃO FINAL ESTÁ AQUI:
+        // O "" garante que o app tire você de dentro da lista e pegue o seu ID real!
+        const usuarioReal = Array.isArray(dados.usuario) ? dados.usuario[0] : dados.usuario;
+
+        if (onLogin) {
+          onLogin(usuarioReal);
+        } else {
+          setUsuarioAtual(usuarioReal);
+          setTelaAtual('Casas');
+        }
       } else {
         alert('Ops: ' + dados.mensagem);
       }

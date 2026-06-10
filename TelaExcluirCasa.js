@@ -4,6 +4,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { FontAwesome5, Ionicons, Feather } from '@expo/vector-icons';
 
+const API_URL = 'http://192.168.1.245:3000';
+
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
@@ -11,7 +13,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 export default function TelaExcluirCasa({
   setTelaAtual, casas, setCasas, pets, setPets, casaAtual, setCasaAtual, usuarioAtual, modoNoturno
 }) {
-  const minhasCasasParaExcluir = casas.filter(casa => casa.adminId === usuarioAtual?.id);
+  const minhasCasasParaExcluir = casas.filter(casa => String(casa.adminId ?? casa.admin_id) === String(usuarioAtual?.id));
 
   const tema = modoNoturno ? {
     fundo: ['#121212', '#2C3E50'],
@@ -47,14 +49,32 @@ export default function TelaExcluirCasa({
   };
 
   const handleExcluir = (casa) => {
-    const confirmarExclusao = () => {
-      animar();
+    const confirmarExclusao = async () => {
+      try {
+        const resposta = await fetch(`${API_URL}/casas/${casa.id}`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ admin_id: usuarioAtual?.id })
+        });
 
-      setCasas(casas.filter(c => c.id !== casa.id));
-      setPets(pets.filter(p => p.casaId !== casa.id));
+        const dados = await resposta.json();
 
-      if (casaAtual?.id === casa.id) {
-        setCasaAtual(null);
+        if (!dados.sucesso) {
+          alert('Ops: ' + (dados.mensagem || 'Erro ao excluir casa.'));
+          return;
+        }
+
+        animar();
+
+        setCasas(casas.filter(c => c.id !== casa.id));
+        setPets(pets.filter(p => p.casaId !== casa.id));
+
+        if (casaAtual?.id === casa.id) {
+          setCasaAtual(null);
+        }
+      } catch (error) {
+        console.error(error);
+        alert('Erro ao conectar com o servidor para excluir a casa!');
       }
     };
 
