@@ -24,7 +24,22 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 const API_URL = Platform.OS === 'web'
   ? 'http://localhost:3000'
-  : 'http://192.168.1.245:3000';
+  : 'http://192.168.1.244:3000';
+
+const lerJsonSeguro = async (resposta) => {
+  const texto = await resposta.text();
+
+  try {
+    return JSON.parse(texto);
+  } catch (error) {
+    console.log('Resposta não JSON recebida do servidor:');
+    console.log(texto);
+
+    throw new Error(
+      'O servidor respondeu HTML ou texto em vez de JSON. Verifique se o backend correto está rodando e se a rota existe.'
+    );
+  }
+};
 
 export default function TelaConfigurarCasa({
   setTelaAtual,
@@ -44,6 +59,11 @@ export default function TelaConfigurarCasa({
 }) {
   const ehLider =
     String(casaAtual?.adminId ?? casaAtual?.admin_id) === String(usuarioAtual?.id);
+
+  const codigoConvite =
+    casaAtual?.codigoConvite ||
+    casaAtual?.codigo_convite ||
+    casaAtual?.id;
 
   const petsDestaCasa =
     pets?.filter(p => String(p.casaId ?? p.casa_id) === String(casaAtual?.id)) || [];
@@ -102,7 +122,7 @@ export default function TelaConfigurarCasa({
         })
       });
 
-      const dados = await resposta.json();
+      const dados = await lerJsonSeguro(resposta);
 
       if (!resposta.ok || dados.sucesso === false) {
         Alert.alert('Erro', dados.erro || 'Erro ao salvar imagem no servidor.');
@@ -139,9 +159,10 @@ export default function TelaConfigurarCasa({
       Alert.alert('Sucesso', 'Imagem da casa atualizada!');
     } catch (error) {
       console.error('Erro ao abrir/salvar imagem da casa:', error);
+
       Alert.alert(
         'Erro',
-        'Erro ao abrir a galeria. Verifique a permissão de fotos do Expo Go.'
+        error.message || 'Erro ao abrir a galeria ou salvar a imagem.'
       );
     }
   };
@@ -149,7 +170,10 @@ export default function TelaConfigurarCasa({
   const compartilharCodigo = async () => {
     try {
       await Share.share({
-        message: `🐾 Olá! Venha cuidar dos pets comigo no app MeuPets!\n\nPara pedir para entrar na minha casa, use o código ID: ${casaAtual.id}`
+        message:
+          `🐾 Olá! Venha cuidar dos pets comigo no app MeuPets!\n\n` +
+          `Para pedir para entrar na minha casa, use este código:\n\n` +
+          `${codigoConvite}`
       });
     } catch (error) {
       console.error('Erro ao compartilhar:', error);
@@ -169,7 +193,7 @@ export default function TelaConfigurarCasa({
         })
       });
 
-      const dados = await resposta.json();
+      const dados = await lerJsonSeguro(resposta);
 
       if (!resposta.ok || dados.sucesso === false) {
         Alert.alert('Erro', dados.erro || 'Erro ao aprovar membro.');
@@ -190,9 +214,11 @@ export default function TelaConfigurarCasa({
       if (buscarMembrosDaCasa && casaAtual?.id) {
         await buscarMembrosDaCasa(casaAtual.id);
       }
+
+      Alert.alert('Sucesso', 'Membro aprovado com sucesso!');
     } catch (error) {
       console.error('Erro ao aprovar:', error);
-      Alert.alert('Erro', 'Não foi possível conectar ao servidor.');
+      Alert.alert('Erro', error.message || 'Não foi possível conectar ao servidor.');
     }
   };
 
@@ -221,7 +247,7 @@ export default function TelaConfigurarCasa({
                 })
               });
 
-              const dados = await resposta.json();
+              const dados = await lerJsonSeguro(resposta);
 
               if (!resposta.ok || dados.sucesso === false) {
                 Alert.alert('Erro', dados.erro || 'Erro ao rejeitar membro.');
@@ -242,9 +268,11 @@ export default function TelaConfigurarCasa({
               if (buscarMembrosDaCasa && casaAtual?.id) {
                 await buscarMembrosDaCasa(casaAtual.id);
               }
+
+              Alert.alert('Sucesso', 'Solicitação rejeitada.');
             } catch (error) {
               console.error('Erro ao rejeitar:', error);
-              Alert.alert('Erro', 'Não foi possível conectar ao servidor.');
+              Alert.alert('Erro', error.message || 'Não foi possível conectar ao servidor.');
             }
           }
         }
@@ -282,7 +310,7 @@ export default function TelaConfigurarCasa({
                 })
               });
 
-              const dados = await resposta.json();
+              const dados = await lerJsonSeguro(resposta);
 
               if (!resposta.ok || dados.sucesso === false) {
                 Alert.alert('Erro', dados.erro || 'Erro ao excluir o pet.');
@@ -302,7 +330,7 @@ export default function TelaConfigurarCasa({
               Alert.alert('Sucesso', 'Pet removido com sucesso!');
             } catch (error) {
               console.error('Erro ao excluir pet:', error);
-              Alert.alert('Erro', 'Não foi possível conectar ao servidor.');
+              Alert.alert('Erro', error.message || 'Não foi possível conectar ao servidor.');
             }
           }
         }
@@ -379,7 +407,7 @@ export default function TelaConfigurarCasa({
               ]}
             >
               <Feather name="hash" size={16} color="#F86F03" />
-              <Text style={styles.textoBadgeID}>ID: {casaAtual?.id}</Text>
+              <Text style={styles.textoBadgeID}>Código: {codigoConvite}</Text>
             </View>
           </View>
 
@@ -458,50 +486,64 @@ export default function TelaConfigurarCasa({
               Membros Ativos
             </Text>
 
-            {membrosAtivos.map((membro, index) => {
-              const eOLider =
-                String(membro.id) === String(casaAtual?.adminId ?? casaAtual?.admin_id);
+            {membrosAtivos.length > 0 ? (
+              membrosAtivos.map((membro, index) => {
+                const eOLider =
+                  String(membro.id) === String(casaAtual?.adminId ?? casaAtual?.admin_id);
 
-              return (
-                <View
-                  key={`ativo-${index}`}
-                  style={[
-                    styles.cartaoMembro,
-                    {
-                      backgroundColor: eOLider ? corMembroLider : corMembroComum,
-                      borderColor: eOLider ? corMembroLiderBorda : corMembroComumBorda,
-                      borderWidth: 1
-                    }
-                  ]}
-                >
-                  <Image
-                    source={{
-                      uri:
-                        membro.imagem ||
-                        'https://cdn-icons-png.flaticon.com/512/149/149071.png'
-                    }}
-                    style={styles.imagemMembro}
-                  />
-
-                  <View style={styles.infoMembro}>
-                    <Text style={[styles.nomeMembro, { color: corTextoPrincipal }]}>
-                      {membro.nome}{' '}
-                      {String(membro.id) === String(usuarioAtual?.id) && '(Você)'}
-                    </Text>
-
-                    <Text
-                      style={
-                        eOLider
-                          ? styles.statusLider
-                          : [styles.statusComum, { color: corTextoSecundario }]
+                return (
+                  <View
+                    key={`ativo-${index}`}
+                    style={[
+                      styles.cartaoMembro,
+                      {
+                        backgroundColor: eOLider ? corMembroLider : corMembroComum,
+                        borderColor: eOLider ? corMembroLiderBorda : corMembroComumBorda,
+                        borderWidth: 1
                       }
-                    >
-                      {eOLider ? '👑 Líder da Casa' : '👤 Convidado'}
-                    </Text>
+                    ]}
+                  >
+                    <Image
+                      source={{
+                        uri:
+                          membro.imagem ||
+                          'https://cdn-icons-png.flaticon.com/512/149/149071.png'
+                      }}
+                      style={styles.imagemMembro}
+                    />
+
+                    <View style={styles.infoMembro}>
+                      <Text style={[styles.nomeMembro, { color: corTextoPrincipal }]}>
+                        {membro.nome}{' '}
+                        {String(membro.id) === String(usuarioAtual?.id) && '(Você)'}
+                      </Text>
+
+                      <Text
+                        style={
+                          eOLider
+                            ? styles.statusLider
+                            : [styles.statusComum, { color: corTextoSecundario }]
+                        }
+                      >
+                        {eOLider ? '👑 Líder da Casa' : '👤 Convidado'}
+                      </Text>
+                    </View>
                   </View>
-                </View>
-              );
-            })}
+                );
+              })
+            ) : (
+              <View
+                style={[
+                  styles.areaVaziaPets,
+                  {
+                    backgroundColor: corAreaVazia,
+                    borderColor: corAreaVaziaBorda
+                  }
+                ]}
+              >
+                <Text style={styles.textoVazioPets}>Nenhum membro ativo.</Text>
+              </View>
+            )}
           </View>
 
           <View style={styles.secao}>

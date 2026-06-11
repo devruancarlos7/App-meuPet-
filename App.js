@@ -32,7 +32,10 @@ import TelaEmergencia from './TelaEmergencia';
 
 const API_URL = Platform.OS === 'web'
   ? 'http://localhost:3000'
-  : 'http://192.168.1.245:3000';
+  : 'http://192.168.1.244:3000';
+
+const CHAVE_USUARIO_LOGADO = '@usuario_logado_meupets';
+const CHAVE_MODO_NOTURNO = '@meupets_modo_noturno';
 
 export default function App() {
   const [telaAtual, setTelaAtual] = useState('Principal');
@@ -41,7 +44,9 @@ export default function App() {
   const [carregandoInicial, setCarregandoInicial] = useState(true);
 
   const [notificacoesAtivas, setNotificacoesAtivas] = useState(true);
-  const [modoNoturno, setModoNoturno] = useState(false);
+
+  // Agora começa como true, ou seja, modo noturno vem ativado por padrão
+  const [modoNoturno, setModoNoturno] = useState(true);
 
   const [casas, setCasas] = useState([]);
   const [casaAtual, setCasaAtual] = useState(null);
@@ -70,6 +75,8 @@ export default function App() {
     ...casa,
     adminId: casa.adminId ?? casa.admin_id,
     admin_id: casa.admin_id ?? casa.adminId,
+    codigoConvite: casa.codigoConvite ?? casa.codigo_convite,
+    codigo_convite: casa.codigo_convite ?? casa.codigoConvite,
     papel: casa.papel ?? casa.tipo
   });
 
@@ -108,20 +115,15 @@ export default function App() {
 
       const dados = await resposta.json();
 
-      const casasFormatadas = Array.isArray(dados)
-        ? dados.map(normalizarCasa)
-        : [];
+      let casasRecebidas = [];
 
-      console.log(
-  'CASAS VINDAS DO BANCO:',
-  casasFormatadas.map(casa => ({
-    id: casa.id,
-    nome: casa.nome,
-    adminId: casa.adminId,
-    temImagem: !!casa.imagem,
-    tamanhoImagem: casa.imagem ? casa.imagem.length : 0
-  }))
-);
+      if (Array.isArray(dados)) {
+        casasRecebidas = dados;
+      } else if (Array.isArray(dados.casas)) {
+        casasRecebidas = dados.casas;
+      }
+
+      const casasFormatadas = casasRecebidas.map(normalizarCasa);
 
       setCasas(casasFormatadas);
 
@@ -155,20 +157,15 @@ export default function App() {
 
       const dados = await resposta.json();
 
-      const petsFormatados = Array.isArray(dados)
-        ? dados.map(normalizarPet)
-        : [];
+      let petsRecebidos = [];
 
-      console.log(
-  'PETS VINDOS DO BANCO:',
-  petsFormatados.map(pet => ({
-    id: pet.id,
-    nome: pet.nome,
-    casaId: pet.casaId,
-    temImagem: !!pet.imagem,
-    tamanhoImagem: pet.imagem ? pet.imagem.length : 0
-  }))
-);
+      if (Array.isArray(dados)) {
+        petsRecebidos = dados;
+      } else if (Array.isArray(dados.pets)) {
+        petsRecebidos = dados.pets;
+      }
+
+      const petsFormatados = petsRecebidos.map(normalizarPet);
 
       setPets(petsFormatados);
 
@@ -202,20 +199,15 @@ export default function App() {
 
       const dados = await resposta.json();
 
-      const membrosFormatados = Array.isArray(dados)
-        ? dados.map(normalizarMembro)
-        : [];
+      let membrosRecebidos = [];
 
-      console.log(
-  'MEMBROS VINDOS DO BANCO:',
-  membrosFormatados.map(membro => ({
-    id: membro.id,
-    nome: membro.nome,
-    tipo: membro.tipo,
-    casaId: membro.casaId,
-    temImagem: !!membro.imagem
-  }))
-);
+      if (Array.isArray(dados)) {
+        membrosRecebidos = dados;
+      } else if (Array.isArray(dados.membros)) {
+        membrosRecebidos = dados.membros;
+      }
+
+      const membrosFormatados = membrosRecebidos.map(normalizarMembro);
 
       setMembros(membrosFormatados);
 
@@ -242,10 +234,19 @@ export default function App() {
     }
   }, [buscarCasasDoUsuario, buscarPetsDaCasa, buscarMembrosDaCasa, casaAtual?.id]);
 
+  // Carrega usuário salvo e tema salvo quando o app abre
   useEffect(() => {
-    const carregarUsuarioSalvo = async () => {
+    const carregarDadosSalvos = async () => {
       try {
-        const usuarioSalvo = await AsyncStorage.getItem('@usuario_logado_meupets');
+        const temaSalvo = await AsyncStorage.getItem(CHAVE_MODO_NOTURNO);
+
+        if (temaSalvo === null) {
+          setModoNoturno(true);
+        } else {
+          setModoNoturno(temaSalvo === 'true');
+        }
+
+        const usuarioSalvo = await AsyncStorage.getItem(CHAVE_USUARIO_LOGADO);
 
         if (usuarioSalvo) {
           const usuario = JSON.parse(usuarioSalvo);
@@ -257,14 +258,30 @@ export default function App() {
           }
         }
       } catch (erro) {
-        console.error('Erro ao carregar usuário salvo:', erro);
+        console.error('Erro ao carregar dados salvos:', erro);
+        setModoNoturno(true);
       } finally {
         setCarregandoInicial(false);
       }
     };
 
-    carregarUsuarioSalvo();
+    carregarDadosSalvos();
   }, [buscarCasasDoUsuario]);
+
+  // Salva o modo noturno sempre que a pessoa mudar no Perfil
+  useEffect(() => {
+    const salvarTema = async () => {
+      if (carregandoInicial) return;
+
+      try {
+        await AsyncStorage.setItem(CHAVE_MODO_NOTURNO, String(modoNoturno));
+      } catch (erro) {
+        console.error('Erro ao salvar modo noturno:', erro);
+      }
+    };
+
+    salvarTema();
+  }, [modoNoturno, carregandoInicial]);
 
   useEffect(() => {
     if (usuarioAtual?.id && telaAtual === 'Casas') {
@@ -314,7 +331,7 @@ export default function App() {
 
     try {
       await AsyncStorage.setItem(
-        '@usuario_logado_meupets',
+        CHAVE_USUARIO_LOGADO,
         JSON.stringify(usuarioReal)
       );
     } catch (erro) {
@@ -330,7 +347,7 @@ export default function App() {
 
   const sairDaConta = async () => {
     try {
-      await AsyncStorage.removeItem('@usuario_logado_meupets');
+      await AsyncStorage.removeItem(CHAVE_USUARIO_LOGADO);
     } catch (erro) {
       console.error('Erro ao remover usuário salvo:', erro);
     }
@@ -360,8 +377,11 @@ export default function App() {
 
   if (carregandoInicial) {
     return (
-      <LinearGradient colors={['#F86F03', '#4F7FFF']} style={styles.container}>
-        <StatusBar style="light" />
+      <LinearGradient
+        colors={modoNoturno ? ['#121212', '#2C3E50'] : ['#F86F03', '#4F7FFF']}
+        style={styles.container}
+      >
+        <StatusBar style={modoNoturno ? 'light' : 'auto'} />
 
         <SafeAreaView style={styles.areaCarregando}>
           <FontAwesome5 name="paw" size={70} color="#FFF" />
