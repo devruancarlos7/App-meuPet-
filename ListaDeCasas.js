@@ -16,7 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { Feather } from '@expo/vector-icons';
 
-const API_URL = 'http://192.168.1.244:3000';
+const API_URL = 'http://10.141.52.10:3000';
 
 // Mágica da animação no Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {

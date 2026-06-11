@@ -18,7 +18,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { FontAwesome5, Feather } from '@expo/vector-icons';
 import * as Notifications from 'expo-notifications';
-import DateTimePicker from '@react-native-community/datetimepicker';
 
 LogBox.ignoreLogs(['expo-notifications: Android Push notifications']);
 
@@ -36,7 +35,7 @@ Notifications.setNotificationHandler({
 
 const API_URL = Platform.OS === 'web'
   ? 'http://localhost:3000'
-  : 'http://192.168.1.244:3000';
+  : 'http://10.141.52.10:3000';
 
 export default function TelaAgendar({
   setTelaAtual,
@@ -46,10 +45,6 @@ export default function TelaAgendar({
   notificacoesAtivas,
   modoNoturno
 }) {
-  const [dataExata, setDataExata] = useState(new Date());
-  const [mostrarPicker, setMostrarPicker] = useState(false);
-  const [modoPicker, setModoPicker] = useState('date');
-
   const [textoData, setTextoData] = useState('');
   const [textoHorario, setTextoHorario] = useState('');
   const [compromisso, setCompromisso] = useState('');
@@ -68,6 +63,121 @@ export default function TelaAgendar({
   const navegarComAnimacao = (tela) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setTelaAtual(tela);
+  };
+
+  const formatarDataManual = (texto) => {
+    let numeros = texto.replace(/\D/g, '');
+
+    if (numeros.length > 8) {
+      numeros = numeros.slice(0, 8);
+    }
+
+    if (numeros.length <= 2) {
+      return numeros;
+    }
+
+    if (numeros.length <= 4) {
+      return `${numeros.slice(0, 2)}/${numeros.slice(2)}`;
+    }
+
+    return `${numeros.slice(0, 2)}/${numeros.slice(2, 4)}/${numeros.slice(4)}`;
+  };
+
+  const formatarHorarioManual = (texto) => {
+    let numeros = texto.replace(/\D/g, '');
+
+    if (numeros.length > 4) {
+      numeros = numeros.slice(0, 4);
+    }
+
+    if (numeros.length <= 2) {
+      return numeros;
+    }
+
+    return `${numeros.slice(0, 2)}:${numeros.slice(2)}`;
+  };
+
+  const validarDataExistente = (dataTexto) => {
+    const numeros = String(dataTexto).replace(/\D/g, '');
+
+    if (numeros.length !== 8) {
+      return {
+        valido: false,
+        mensagem: 'Digite a data completa no formato DD/MM/AAAA.'
+      };
+    }
+
+    const dia = Number(numeros.slice(0, 2));
+    const mes = Number(numeros.slice(2, 4));
+    const ano = Number(numeros.slice(4, 8));
+
+    if (dia < 1 || mes < 1 || mes > 12 || ano < 1900 || ano > 2100) {
+      return {
+        valido: false,
+        mensagem: 'Digite uma data válida.'
+      };
+    }
+
+    const data = new Date(ano, mes - 1, dia);
+
+    const dataExiste =
+      data.getFullYear() === ano &&
+      data.getMonth() === mes - 1 &&
+      data.getDate() === dia;
+
+    if (!dataExiste) {
+      return {
+        valido: false,
+        mensagem: 'Essa data não existe. Confira o dia, mês e ano.'
+      };
+    }
+
+    return {
+      valido: true
+    };
+  };
+
+  const validarHorarioExistente = (horarioTexto) => {
+    const numeros = String(horarioTexto).replace(/\D/g, '');
+
+    if (numeros.length !== 4) {
+      return {
+        valido: false,
+        mensagem: 'Digite o horário completo no formato HH:MM.'
+      };
+    }
+
+    const hora = Number(numeros.slice(0, 2));
+    const minuto = Number(numeros.slice(2, 4));
+
+    if (hora < 0 || hora > 23 || minuto < 0 || minuto > 59) {
+      return {
+        valido: false,
+        mensagem: 'Digite um horário válido. Exemplo: 14:30.'
+      };
+    }
+
+    return {
+      valido: true
+    };
+  };
+
+  const montarDataComHorario = (dataTexto, horarioTexto) => {
+    const partesData = String(dataTexto).split('/');
+    const partesHora = String(horarioTexto).split(':');
+
+    if (partesData.length !== 3 || partesHora.length !== 2) {
+      return null;
+    }
+
+    const dia = Number(partesData[0]);
+    const mes = Number(partesData[1]);
+    const ano = Number(partesData[2]);
+
+    const hora = Number(partesHora[0]);
+    const minuto = Number(partesHora[1]);
+
+    return new Date(ano, mes - 1, dia, hora, minuto, 0, 0);
   };
 
   const buscarAgendamentosDoPet = async () => {
@@ -134,53 +244,55 @@ export default function TelaAgendar({
     return agora <= dataExpiracao;
   };
 
-  const aoEscolherDataHora = (event, dataSelecionada) => {
-    if (Platform.OS === 'android') {
-      setMostrarPicker(false);
-    }
-
-    if (dataSelecionada) {
-      if (modoPicker === 'date') {
-        const novaData = new Date(dataExata);
-        novaData.setFullYear(dataSelecionada.getFullYear());
-        novaData.setMonth(dataSelecionada.getMonth());
-        novaData.setDate(dataSelecionada.getDate());
-
-        setDataExata(novaData);
-
-        const dia = String(novaData.getDate()).padStart(2, '0');
-        const mes = String(novaData.getMonth() + 1).padStart(2, '0');
-        const ano = novaData.getFullYear();
-
-        setTextoData(`${dia}/${mes}/${ano}`);
-      } else {
-        const novaData = new Date(dataExata);
-        novaData.setHours(dataSelecionada.getHours());
-        novaData.setMinutes(dataSelecionada.getMinutes());
-
-        setDataExata(novaData);
-
-        const horas = String(novaData.getHours()).padStart(2, '0');
-        const min = String(novaData.getMinutes()).padStart(2, '0');
-
-        setTextoHorario(`${horas}:${min}`);
-      }
-    }
-  };
-
-  const abrirCalendario = () => {
-    setModoPicker('date');
-    setMostrarPicker(true);
-  };
-
-  const abrirRelogio = () => {
-    setModoPicker('time');
-    setMostrarPicker(true);
-  };
-
   const handleAgendar = async () => {
-    if (textoData === '' || textoHorario === '' || compromisso.trim() === '') {
-      alert('Por favor, preencha a data, o horário e o compromisso!');
+    if (!petAtual?.id) {
+      Alert.alert('Erro', 'Nenhum pet selecionado.');
+      return;
+    }
+
+    if (compromisso.trim() === '') {
+      Alert.alert('Atenção', 'Por favor, preencha o compromisso!');
+      return;
+    }
+
+    if (textoData.trim() === '') {
+      Alert.alert('Atenção', 'Por favor, digite a data do agendamento!');
+      return;
+    }
+
+    if (textoHorario.trim() === '') {
+      Alert.alert('Atenção', 'Por favor, digite o horário do agendamento!');
+      return;
+    }
+
+    const validacaoData = validarDataExistente(textoData);
+
+    if (!validacaoData.valido) {
+      Alert.alert('Data inválida', validacaoData.mensagem);
+      return;
+    }
+
+    const validacaoHorario = validarHorarioExistente(textoHorario);
+
+    if (!validacaoHorario.valido) {
+      Alert.alert('Horário inválido', validacaoHorario.mensagem);
+      return;
+    }
+
+    const dataHoraAgendamento = montarDataComHorario(textoData, textoHorario);
+
+    if (!dataHoraAgendamento) {
+      Alert.alert('Erro', 'Não foi possível montar a data e horário do agendamento.');
+      return;
+    }
+
+    const agora = new Date();
+
+    if (dataHoraAgendamento < agora) {
+      Alert.alert(
+        'Data no passado',
+        'O agendamento precisa ser para uma data e horário atuais ou futuros.'
+      );
       return;
     }
 
@@ -202,23 +314,22 @@ export default function TelaAgendar({
       });
 
       if (resposta.ok) {
-        alert('Agendamento salvo com sucesso!');
+        Alert.alert('Sucesso', 'Agendamento salvo com sucesso!');
 
         setTextoData('');
         setTextoHorario('');
         setCompromisso('');
         setObservacao('');
-        setDataExata(new Date());
 
         await buscarAgendamentosDoPet();
 
         navegarComAnimacao('MetasCuidados');
       } else {
-        alert('Erro ao salvar o agendamento no banco.');
+        Alert.alert('Erro', 'Erro ao salvar o agendamento no banco.');
       }
     } catch (erro) {
       console.error(erro);
-      alert('Não foi possível conectar ao servidor.');
+      Alert.alert('Erro', 'Não foi possível conectar ao servidor.');
     }
   };
 
@@ -247,13 +358,13 @@ export default function TelaAgendar({
                   agendamentosGlobais.filter(a => String(a.id) !== String(id))
                 );
 
-                alert('Agendamento removido com sucesso!');
+                Alert.alert('Sucesso', 'Agendamento removido com sucesso!');
               } else {
-                alert('Erro ao excluir agendamento no servidor.');
+                Alert.alert('Erro', 'Erro ao excluir agendamento no servidor.');
               }
             } catch (error) {
               console.error('Erro ao excluir:', error);
-              alert('Não foi possível conectar ao servidor.');
+              Alert.alert('Erro', 'Não foi possível conectar ao servidor.');
             }
           }
         }
@@ -362,53 +473,57 @@ export default function TelaAgendar({
               />
             </View>
 
-            <TouchableOpacity
+            <View
               style={[
-                styles.areaInputBotao,
+                styles.areaInput,
                 {
                   backgroundColor: tema.inputFundo,
                   borderColor: tema.inputBorda
                 }
               ]}
-              onPress={abrirCalendario}
             >
               <Feather name="calendar" size={20} color="#4F7FFF" style={styles.iconeInput} />
 
-              <Text
-                style={[
-                  styles.textoInputBotao,
-                  {
-                    color: textoData ? tema.texto : tema.texto2
-                  }
-                ]}
-              >
-                {textoData || 'Escolher Data'}
-              </Text>
-            </TouchableOpacity>
+              <TextInput
+                style={[styles.input, { color: tema.texto }]}
+                placeholder="Data (DD/MM/AAAA)"
+                placeholderTextColor={tema.texto2}
+                value={textoData}
+                onChangeText={(texto) => setTextoData(formatarDataManual(texto))}
+                keyboardType="number-pad"
+                maxLength={10}
+              />
+            </View>
 
-            <TouchableOpacity
+            <Text style={styles.textoAjuda}>
+              Digite apenas números. Exemplo: 15062026 vira 15/06/2026.
+            </Text>
+
+            <View
               style={[
-                styles.areaInputBotao,
+                styles.areaInput,
                 {
                   backgroundColor: tema.inputFundo,
                   borderColor: tema.inputBorda
                 }
               ]}
-              onPress={abrirRelogio}
             >
               <Feather name="clock" size={20} color="#4F7FFF" style={styles.iconeInput} />
 
-              <Text
-                style={[
-                  styles.textoInputBotao,
-                  {
-                    color: textoHorario ? tema.texto : tema.texto2
-                  }
-                ]}
-              >
-                {textoHorario || 'Escolher Horário'}
-              </Text>
-            </TouchableOpacity>
+              <TextInput
+                style={[styles.input, { color: tema.texto }]}
+                placeholder="Horário (HH:MM)"
+                placeholderTextColor={tema.texto2}
+                value={textoHorario}
+                onChangeText={(texto) => setTextoHorario(formatarHorarioManual(texto))}
+                keyboardType="number-pad"
+                maxLength={5}
+              />
+            </View>
+
+            <Text style={styles.textoAjuda}>
+              Exemplo: 1430 vira 14:30.
+            </Text>
 
             <View
               style={[
@@ -488,16 +603,6 @@ export default function TelaAgendar({
           </ScrollView>
         </View>
       </SafeAreaView>
-
-      {mostrarPicker && (
-        <DateTimePicker
-          value={dataExata}
-          mode={modoPicker}
-          is24Hour={true}
-          display="default"
-          onChange={aoEscolherDataHora}
-        />
-      )}
     </LinearGradient>
   );
 }
@@ -593,27 +698,11 @@ const styles = StyleSheet.create({
     marginLeft: 5
   },
 
-  areaInputBotao: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 16,
-    marginBottom: 20,
-    paddingHorizontal: 20,
-    height: 65,
-    borderWidth: 1
-  },
-
-  textoInputBotao: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: 'bold'
-  },
-
   areaInput: {
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: 16,
-    marginBottom: 20,
+    marginBottom: 10,
     paddingHorizontal: 20,
     height: 65,
     borderWidth: 1
@@ -627,6 +716,15 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     fontWeight: 'bold'
+  },
+
+  textoAjuda: {
+    color: '#888',
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 16,
+    marginLeft: 5,
+    marginTop: -2
   },
 
   botaoAcao: {

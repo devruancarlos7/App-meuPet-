@@ -24,7 +24,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 const API_URL = Platform.OS === 'web'
   ? 'http://localhost:3000'
-  : 'http://192.168.1.244:3000';
+  : 'http://10.141.52.10:3000';
 
 const normalizarTexto = (texto = '') => {
   return String(texto)
@@ -400,6 +400,12 @@ export default function ListaDePets({
   const [carregandoPets, setCarregandoPets] = useState(false);
   const [resultado, setResultado] = useState(null);
 
+  const imagemUsuarioLogado =
+    usuarioAtual?.imagem ||
+    usuarioAtual?.foto ||
+    usuarioAtual?.avatar ||
+    '';
+
   useEffect(() => {
     const buscarPets = async () => {
       if (!casaAtual?.id || !setPets) return;
@@ -617,7 +623,14 @@ export default function ListaDePets({
               style={styles.botaoIconeTop}
               onPress={() => navegarComAnimacao('PerfilUsuario')}
             >
-              <Feather name="user" size={22} color="#FFF" />
+              {imagemUsuarioLogado ? (
+                <Image
+                  source={{ uri: imagemUsuarioLogado }}
+                  style={styles.fotoUsuarioHeader}
+                />
+              ) : (
+                <Feather name="user" size={22} color="#FFF" />
+              )}
             </TouchableOpacity>
 
             {isAdmin && (
@@ -942,7 +955,17 @@ const styles = StyleSheet.create({
     borderRadius: 22.5,
     backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
-    alignItems: 'center'
+    alignItems: 'center',
+    overflow: 'hidden'
+  },
+
+  fotoUsuarioHeader: {
+    width: 45,
+    height: 45,
+    borderRadius: 22.5,
+    borderWidth: 2,
+    borderColor: '#FFF',
+    backgroundColor: '#DDD'
   },
 
   cardAlegre: {

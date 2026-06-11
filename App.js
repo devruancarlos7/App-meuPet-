@@ -32,7 +32,7 @@ import TelaEmergencia from './TelaEmergencia';
 
 const API_URL = Platform.OS === 'web'
   ? 'http://localhost:3000'
-  : 'http://192.168.1.244:3000';
+  : 'http://10.141.52.10:3000';
 
 const CHAVE_USUARIO_LOGADO = '@usuario_logado_meupets';
 const CHAVE_MODO_NOTURNO = '@meupets_modo_noturno';
@@ -563,14 +563,15 @@ export default function App() {
   }
 
   if (telaAtual === 'Emergencia') {
-    return (
-      <TelaEmergencia
-        setTelaAtual={setTelaAtual}
-        petAtual={petAtual}
-        modoNoturno={modoNoturno}
-      />
-    );
-  }
+  return (
+    <TelaEmergencia
+      setTelaAtual={setTelaAtual}
+      petAtual={petAtual}
+      pets={pets}
+      modoNoturno={modoNoturno}
+    />
+  );
+}
 
   if (telaAtual === 'PerfilUsuario') {
     return (

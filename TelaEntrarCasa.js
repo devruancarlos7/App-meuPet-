@@ -24,7 +24,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 const API_URL = Platform.OS === 'web'
   ? 'http://localhost:3000'
-  : 'http://192.168.1.244:3000';
+  : 'http://10.141.52.10:3000';
 
 const formatarCodigoConvite = (texto) => {
   let codigo = String(texto || '').toUpperCase();
