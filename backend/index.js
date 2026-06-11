@@ -209,6 +209,41 @@ const garantirTabelaAgendamentos = () => {
     );
 };
 
+const garantirIndiceUnicoMetas = () => {
+    db.query(
+        `
+        SELECT INDEX_NAME
+        FROM INFORMATION_SCHEMA.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'metas_cuidados'
+        AND COLUMN_NAME = 'pet_id'
+        AND NON_UNIQUE = 0
+        LIMIT 1
+        `,
+        (erro, resultados) => {
+            if (erro) {
+                console.error('Erro ao verificar índice único de metas:', erro.message);
+                return;
+            }
+
+            if (resultados.length > 0) {
+                return;
+            }
+
+            db.query(
+                'ALTER TABLE metas_cuidados ADD UNIQUE KEY unico_pet_meta (pet_id)',
+                (erroIndice) => {
+                    if (erroIndice) {
+                        console.error('Aviso ao criar índice único em metas_cuidados:', erroIndice.message);
+                    } else {
+                        console.log('Índice único unico_pet_meta criado em metas_cuidados.');
+                    }
+                }
+            );
+        }
+    );
+};
+
 const garantirTabelaMetas = () => {
     db.query(
         `
@@ -238,7 +273,10 @@ const garantirTabelaMetas = () => {
         (erro) => {
             if (erro) {
                 console.error('Erro ao garantir tabela metas_cuidados:', erro.message);
+                return;
             }
+
+            garantirIndiceUnicoMetas();
         }
     );
 };
@@ -473,9 +511,6 @@ app.post('/casas', (req, res) => {
 
 // ---------------------------------------------------------
 // ROTA 4: SOLICITAR ENTRADA EM UMA CASA
-// ATENÇÃO: agora entra SOMENTE por codigo_convite.
-// O id numérico da casa continua existindo no banco,
-// mas não serve mais para convidado entrar.
 // ---------------------------------------------------------
 app.post('/casas/entrar', (req, res) => {
     let codigoCasa = String(req.body.codigo || '').trim().toUpperCase();
@@ -950,6 +985,13 @@ app.post('/pets/:petId/metas', (req, res) => {
         vet_periodo
     } = req.body;
 
+    if (!petId) {
+        return res.status(400).json({
+            sucesso: false,
+            erro: 'ID do pet não informado.'
+        });
+    }
+
     const dados = {
         comida_meta: Number(comida_meta ?? 3),
         comida_feita: Number(comida_feita ?? 0),
@@ -968,129 +1010,99 @@ app.post('/pets/:petId/metas', (req, res) => {
         vet_periodo: vet_periodo || 'Semestral'
     };
 
+    console.log('----------------------------------------');
+    console.log('SALVANDO METAS DO PET');
+    console.log('PET ID:', petId);
+    console.log('DADOS:', dados);
+    console.log('----------------------------------------');
+
+    const query = `
+        INSERT INTO metas_cuidados (
+            pet_id,
+            comida_meta,
+            comida_feita,
+            comida_periodo,
+            passeio_meta,
+            passeio_feita,
+            passeio_periodo,
+            curativo_meta,
+            curativo_feita,
+            curativo_periodo,
+            vet_meta,
+            vet_feita,
+            vet_periodo
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+            comida_meta = VALUES(comida_meta),
+            comida_feita = VALUES(comida_feita),
+            comida_periodo = VALUES(comida_periodo),
+
+            passeio_meta = VALUES(passeio_meta),
+            passeio_feita = VALUES(passeio_feita),
+            passeio_periodo = VALUES(passeio_periodo),
+
+            curativo_meta = VALUES(curativo_meta),
+            curativo_feita = VALUES(curativo_feita),
+            curativo_periodo = VALUES(curativo_periodo),
+
+            vet_meta = VALUES(vet_meta),
+            vet_feita = VALUES(vet_feita),
+            vet_periodo = VALUES(vet_periodo)
+    `;
+
     db.query(
-        'SELECT * FROM metas_cuidados WHERE pet_id = ? LIMIT 1',
-        [petId],
-        (erro, resultados) => {
+        query,
+        [
+            petId,
+
+            dados.comida_meta,
+            dados.comida_feita,
+            dados.comida_periodo,
+
+            dados.passeio_meta,
+            dados.passeio_feita,
+            dados.passeio_periodo,
+
+            dados.curativo_meta,
+            dados.curativo_feita,
+            dados.curativo_periodo,
+
+            dados.vet_meta,
+            dados.vet_feita,
+            dados.vet_periodo
+        ],
+        (erro) => {
             if (erro) {
-                console.error('Erro ao verificar metas:', erro);
+                console.error('Erro ao salvar metas:', erro);
+
                 return res.status(500).json({
                     sucesso: false,
-                    erro: 'Erro ao verificar metas no banco.'
+                    erro: 'Erro ao salvar metas.',
+                    detalhes: erro.message
                 });
             }
 
-            if (resultados.length > 0) {
-                const queryUpdate = `
-                    UPDATE metas_cuidados SET
-                        comida_meta = ?,
-                        comida_feita = ?,
-                        comida_periodo = ?,
+            db.query(
+                'SELECT * FROM metas_cuidados WHERE pet_id = ? LIMIT 1',
+                [petId],
+                (erroBusca, resultado) => {
+                    if (erroBusca) {
+                        console.error('Erro ao buscar metas após salvar:', erroBusca);
 
-                        passeio_meta = ?,
-                        passeio_feita = ?,
-                        passeio_periodo = ?,
-
-                        curativo_meta = ?,
-                        curativo_feita = ?,
-                        curativo_periodo = ?,
-
-                        vet_meta = ?,
-                        vet_feita = ?,
-                        vet_periodo = ?
-                    WHERE pet_id = ?
-                `;
-
-                db.query(
-                    queryUpdate,
-                    [
-                        dados.comida_meta,
-                        dados.comida_feita,
-                        dados.comida_periodo,
-
-                        dados.passeio_meta,
-                        dados.passeio_feita,
-                        dados.passeio_periodo,
-
-                        dados.curativo_meta,
-                        dados.curativo_feita,
-                        dados.curativo_periodo,
-
-                        dados.vet_meta,
-                        dados.vet_feita,
-                        dados.vet_periodo,
-
-                        petId
-                    ],
-                    (err) => {
-                        if (err) {
-                            console.error('Erro ao atualizar metas:', err);
-                            return res.status(500).json({
-                                sucesso: false,
-                                erro: 'Erro ao atualizar metas.',
-                                detalhes: err.message
-                            });
-                        }
-
-                        res.status(200).json({
-                            sucesso: true,
-                            mensagem: 'Metas atualizadas com sucesso!'
+                        return res.status(500).json({
+                            sucesso: false,
+                            erro: 'Metas salvas, mas houve erro ao buscar novamente.',
+                            detalhes: erroBusca.message
                         });
                     }
-                );
-            } else {
-                const queryInsert = `
-                    INSERT INTO metas_cuidados (
-                        pet_id,
-                        comida_meta,
-                        comida_feita,
-                        comida_periodo,
-                        passeio_meta,
-                        passeio_feita,
-                        passeio_periodo,
-                        curativo_meta,
-                        curativo_feita,
-                        curativo_periodo,
-                        vet_meta,
-                        vet_feita,
-                        vet_periodo
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                `;
 
-                db.query(
-                    queryInsert,
-                    [
-                        petId,
-                        dados.comida_meta,
-                        dados.comida_feita,
-                        dados.comida_periodo,
-                        dados.passeio_meta,
-                        dados.passeio_feita,
-                        dados.passeio_periodo,
-                        dados.curativo_meta,
-                        dados.curativo_feita,
-                        dados.curativo_periodo,
-                        dados.vet_meta,
-                        dados.vet_feita,
-                        dados.vet_periodo
-                    ],
-                    (err) => {
-                        if (err) {
-                            console.error('Erro ao criar metas:', err);
-                            return res.status(500).json({
-                                sucesso: false,
-                                erro: 'Erro ao criar novas metas.',
-                                detalhes: err.message
-                            });
-                        }
-
-                        res.status(201).json({
-                            sucesso: true,
-                            mensagem: 'Metas criadas com sucesso!'
-                        });
-                    }
-                );
-            }
+                    return res.status(200).json({
+                        sucesso: true,
+                        mensagem: 'Metas salvas com sucesso!',
+                        metas: resultado[0]
+                    });
+                }
+            );
         }
     );
 });
@@ -1319,13 +1331,6 @@ app.put('/casas/:id/imagem', (req, res) => {
     const casaId = req.params.id;
     const { imagem } = req.body;
 
-    console.log('----------------------------------------');
-    console.log('PEDIDO PARA ATUALIZAR IMAGEM DA CASA');
-    console.log('CASA ID:', casaId);
-    console.log('IMAGEM RECEBIDA?', imagem ? 'SIM' : 'NÃO');
-    console.log('TAMANHO DA IMAGEM:', imagem ? imagem.length : 0);
-    console.log('----------------------------------------');
-
     if (!imagem) {
         return res.status(400).json({
             sucesso: false,
@@ -1371,13 +1376,6 @@ app.put('/pets/:id/imagem', (req, res) => {
     const petId = req.params.id;
     const { imagem } = req.body;
 
-    console.log('----------------------------------------');
-    console.log('PEDIDO PARA ATUALIZAR IMAGEM DO PET');
-    console.log('PET ID:', petId);
-    console.log('IMAGEM RECEBIDA?', imagem ? 'SIM' : 'NÃO');
-    console.log('TAMANHO DA IMAGEM:', imagem ? imagem.length : 0);
-    console.log('----------------------------------------');
-
     if (!imagem) {
         return res.status(400).json({
             sucesso: false,
@@ -1422,13 +1420,6 @@ app.put('/pets/:id/imagem', (req, res) => {
 app.put('/usuarios/:id/imagem', (req, res) => {
     const usuarioId = req.params.id;
     const { imagem } = req.body;
-
-    console.log('----------------------------------------');
-    console.log('PEDIDO PARA ATUALIZAR IMAGEM DO USUÁRIO');
-    console.log('USUÁRIO ID:', usuarioId);
-    console.log('IMAGEM RECEBIDA?', imagem ? 'SIM' : 'NÃO');
-    console.log('TAMANHO DA IMAGEM:', imagem ? imagem.length : 0);
-    console.log('----------------------------------------');
 
     if (!usuarioId) {
         return res.status(400).json({
@@ -1528,7 +1519,6 @@ app.delete('/usuarios/:id', (req, res) => {
                     });
                 }
 
-                // 1. Exclui agendamentos dos pets das casas que esse usuário administra
                 db.query(
                     `
                     DELETE a FROM agendamentos a
@@ -1542,7 +1532,6 @@ app.delete('/usuarios/:id', (req, res) => {
                             return cancelar(erroAgendamentos, 'Erro ao excluir agendamentos do usuário.');
                         }
 
-                        // 2. Exclui metas dos pets das casas que esse usuário administra
                         db.query(
                             `
                             DELETE m FROM metas_cuidados m
@@ -1556,7 +1545,6 @@ app.delete('/usuarios/:id', (req, res) => {
                                     return cancelar(erroMetas, 'Erro ao excluir metas do usuário.');
                                 }
 
-                                // 3. Exclui pets das casas que esse usuário administra
                                 db.query(
                                     `
                                     DELETE p FROM pets p
@@ -1569,7 +1557,6 @@ app.delete('/usuarios/:id', (req, res) => {
                                             return cancelar(erroPets, 'Erro ao excluir pets do usuário.');
                                         }
 
-                                        // 4. Exclui membros das casas que esse usuário administra
                                         db.query(
                                             `
                                             DELETE cm FROM casa_membros cm
@@ -1582,7 +1569,6 @@ app.delete('/usuarios/:id', (req, res) => {
                                                     return cancelar(erroMembrosCasasAdmin, 'Erro ao excluir membros das casas do usuário.');
                                                 }
 
-                                                // 5. Exclui casas que esse usuário administra
                                                 db.query(
                                                     'DELETE FROM casas WHERE admin_id = ?',
                                                     [usuarioId],
@@ -1591,7 +1577,6 @@ app.delete('/usuarios/:id', (req, res) => {
                                                             return cancelar(erroCasas, 'Erro ao excluir casas do usuário.');
                                                         }
 
-                                                        // 6. Remove esse usuário de casas onde ele era convidado ou pendente
                                                         db.query(
                                                             'DELETE FROM casa_membros WHERE usuario_id = ?',
                                                             [usuarioId],
@@ -1600,7 +1585,6 @@ app.delete('/usuarios/:id', (req, res) => {
                                                                     return cancelar(erroMembrosUsuario, 'Erro ao remover usuário das casas.');
                                                                 }
 
-                                                                // 7. Exclui o usuário definitivamente
                                                                 db.query(
                                                                     'DELETE FROM usuarios WHERE id = ?',
                                                                     [usuarioId],
