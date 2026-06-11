@@ -4,7 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { FontAwesome5, Ionicons, Feather } from '@expo/vector-icons';
 
-const API_URL = 'http://192.168.1.245:3000';
+const API_URL = 'http://192.168.1.244:3000';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);

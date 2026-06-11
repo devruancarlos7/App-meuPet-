@@ -36,7 +36,7 @@ Notifications.setNotificationHandler({
 
 const API_URL = Platform.OS === 'web'
   ? 'http://localhost:3000'
-  : 'http://192.168.1.245:3000';
+  : 'http://192.168.1.244:3000';
 
 export default function TelaAgendar({
   setTelaAtual,
